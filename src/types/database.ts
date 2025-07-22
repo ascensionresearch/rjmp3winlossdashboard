@@ -3,30 +3,33 @@ export interface Meeting {
   meeting_outcome?: string
   call_and_meeting_type?: string
   Contacts_fk_Contacts?: string[] // Array of contact UUIDs
-  employee_name?: string
+  activity_assigned_to?: string
   create_date?: string
   // Add other meeting fields as needed
 }
 
 export interface Contact {
-  id: string
-  company_uuid?: string
+  whalesync_postgres_id: string
+  companies?: string
+  Companies_fk_Companies?: string[]
   // Add other contact fields as needed
 }
 
 export interface Company {
-  id: string
-  uuid: string
+  whalesync_postgres_id: string
+  companies?: string // This is the company UUID used for linking
+  deals?: string // Deal UUID for this company
+  Companies_fk_Companies?: string[] // Related company UUIDs
   // Add other company fields as needed
 }
 
 export interface Deal {
-  id: string
+  whalesync_postgres_id: string
+  companies: string
   deal_type?: string
-  deal_status?: string
+  deal_stage?: string
   amount?: number
   create_date?: string
-  company_uuid?: string
   // Add other deal fields as needed
 }
 

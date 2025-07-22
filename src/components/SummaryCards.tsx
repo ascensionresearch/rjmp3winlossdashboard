@@ -7,6 +7,10 @@ interface SummaryCardsProps {
   metrics: EmployeeMetrics[]
 }
 
+function cleanEmployeeName(name: string): string {
+  return name.replace(/\s*\([^)]*\)$/, '').trim()
+}
+
 export default function SummaryCards({ metrics }: SummaryCardsProps) {
   const totalMeetings = metrics.reduce((sum, metric) => sum + metric.meeting_count, 0)
   const totalEmployees = metrics.length
@@ -28,7 +32,7 @@ export default function SummaryCards({ metrics }: SummaryCardsProps) {
     },
     {
       title: 'Top Performer',
-      value: topPerformer.employee_name,
+      value: cleanEmployeeName(topPerformer.employee_name),
       subtitle: `${topPerformer.meeting_count} meetings`,
       icon: TrendingUp,
       iconColor: 'text-orange-600',

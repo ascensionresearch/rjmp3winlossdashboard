@@ -4,7 +4,7 @@ import { startOfYear, startOfMonth, parseISO, differenceInDays } from 'date-fns'
 
 export async function getP3Meetings(timePeriod: TimePeriod = 'all_time'): Promise<Meeting[]> {
   let query = supabase
-    .from('meetings')
+    .from('Meetings')
     .select('*')
     .or('meeting_outcome.eq.P3 - Proposal,and(call_and_meeting_type.eq.P3 - Proposal,meeting_outcome.eq.Completed)')
 
@@ -43,150 +43,236 @@ export async function getContactsFromMeetings(meetings: Meeting[]): Promise<Cont
     }
   })
 
+  console.log(`Looking for ${contactIds.size} unique contact IDs`)
+  console.log(`Sample contact IDs: ${Array.from(contactIds).slice(0, 5).join(', ')}`)
+
   if (contactIds.size === 0) return []
 
-  const { data, error } = await supabase
-    .from('contacts')
-    .select('*')
-    .in('id', Array.from(contactIds))
+  // Process contacts in batches to avoid URL length limits
+  const contactIdsArray = Array.from(contactIds)
+  const batchSize = 100 // Supabase has limits on URL length
+  const allContacts: Contact[] = []
 
-  if (error) {
-    console.error('Error fetching contacts:', error)
-    return []
+  for (let i = 0; i < contactIdsArray.length; i += batchSize) {
+    const batch = contactIdsArray.slice(i, i + batchSize)
+    
+    console.log(`Fetching contacts batch ${i / batchSize + 1}: ${batch.length} IDs`)
+    
+    console.log(`Querying Contacts table with IDs: ${batch.slice(0, 3).join(', ')}...`)
+    
+    const { data, error } = await supabase
+      .from('Contacts')
+      .select('*')
+      .in('whalesync_postgres_id', batch)
+
+    if (error) {
+      console.error(`Error fetching contacts batch ${i / batchSize + 1}:`, error)
+      console.error('Error details:', JSON.stringify(error, null, 2))
+      continue
+    }
+
+    if (data) {
+      console.log(`Batch ${i / batchSize + 1} returned ${data.length} contacts`)
+      allContacts.push(...data)
+    } else {
+      console.log(`Batch ${i / batchSize + 1} returned no data`)
+    }
   }
 
-  return data || []
+  console.log(`Total contacts found: ${allContacts.length}`)
+  return allContacts
 }
 
 export async function getCompaniesFromContacts(contacts: Contact[]): Promise<Company[]> {
   const companyUuids = new Set<string>()
-  
   contacts.forEach(contact => {
-    if (contact.company_uuid) {
-      companyUuids.add(contact.company_uuid)
+    if (contact.companies) {
+      companyUuids.add(contact.companies)
+    }
+    // Optionally, also check Companies_fk_Companies if you want to support multiple companies per contact
+    if (contact.Companies_fk_Companies) {
+      contact.Companies_fk_Companies.forEach(companyId => companyUuids.add(companyId))
     }
   })
-
   if (companyUuids.size === 0) return []
-
   const { data, error } = await supabase
-    .from('companies')
+    .from('Companies')
     .select('*')
-    .in('uuid', Array.from(companyUuids))
-
+    .in('companies', Array.from(companyUuids))
   if (error) {
     console.error('Error fetching companies:', error)
     return []
   }
-
   return data || []
 }
 
 export async function getDealsFromCompanies(companies: Company[]): Promise<Deal[]> {
-  const companyUuids = companies.map(company => company.uuid)
-
+  const companyUuids = companies.map(company => company.companies).filter(Boolean)
   if (companyUuids.length === 0) return []
-
   const { data, error } = await supabase
-    .from('deals')
+    .from('Deals')
     .select('*')
-    .in('company_uuid', companyUuids)
+    .in('companies', companyUuids)
     .in('deal_type', ['Monthly Service', 'Recurring Special Service'])
-
   if (error) {
     console.error('Error fetching deals:', error)
     return []
   }
-
+  if (data) {
+    console.log('Fetched deals:', data)
+  }
   return data || []
 }
 
 export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): Promise<EmployeeMetrics[]> {
   // Get P3 meetings
   const meetings = await getP3Meetings(timePeriod)
-  
-  // Get related contacts, companies, and deals
-  const contacts = await getContactsFromMeetings(meetings)
-  const companies = await getCompaniesFromContacts(contacts)
-  const deals = await getDealsFromCompanies(companies)
+  console.log(`Found ${meetings.length} P3 meetings`)
 
-  // Create a map of company UUIDs to employee names from meetings
-  const companyToEmployeeMap = new Map<string, Set<string>>()
-  
+  // 1. Collect all unique contact UUIDs from meetings
+  const contactIds = new Set<string>()
   meetings.forEach(meeting => {
-    if (meeting.employee_name && meeting.Contacts_fk_Contacts) {
-      meeting.Contacts_fk_Contacts.forEach(contactId => {
-        const contact = contacts.find(c => c.id === contactId)
-        if (contact?.company_uuid) {
-          if (!companyToEmployeeMap.has(contact.company_uuid)) {
-            companyToEmployeeMap.set(contact.company_uuid, new Set())
-          }
-          companyToEmployeeMap.get(contact.company_uuid)!.add(meeting.employee_name!)
-        }
+    if (meeting.Contacts_fk_Contacts) {
+      meeting.Contacts_fk_Contacts.forEach(id => contactIds.add(id))
+    }
+  })
+  const contactIdsArray = Array.from(contactIds)
+
+  // 2. Batch fetch all contacts
+  let contacts: Contact[] = []
+  const batchSize = 100
+  for (let i = 0; i < contactIdsArray.length; i += batchSize) {
+    const batch = contactIdsArray.slice(i, i + batchSize)
+    const { data, error } = await supabase
+      .from('Contacts')
+      .select('whalesync_postgres_id, companies')
+      .in('whalesync_postgres_id', batch)
+    if (error) continue
+    if (data) contacts.push(...data)
+  }
+  const contactMap = new Map(contacts.map(c => [c.whalesync_postgres_id, c]))
+
+  // 3. Collect all unique company UUIDs from contacts
+  const companyIds = new Set<string>()
+  contacts.forEach(contact => {
+    if (contact.companies) companyIds.add(contact.companies)
+  })
+  const companyIdsArray = Array.from(companyIds)
+
+  // 4. Batch fetch all companies
+  let companies: Company[] = []
+  for (let i = 0; i < companyIdsArray.length; i += batchSize) {
+    const batch = companyIdsArray.slice(i, i + batchSize)
+    const { data, error } = await supabase
+      .from('Companies')
+      .select('whalesync_postgres_id, deals, Companies_fk_Companies')
+      .in('whalesync_postgres_id', batch)
+    if (error) continue
+    if (data) companies.push(...data)
+  }
+  const companyMap = new Map(companies.map(c => [c.whalesync_postgres_id, c]))
+
+  // 5. Collect all unique deal UUIDs from companies and related companies
+  const dealIds = new Set<string>()
+  for (const company of companies) {
+    if (company.deals) dealIds.add(company.deals)
+    if (company.Companies_fk_Companies && Array.isArray(company.Companies_fk_Companies)) {
+      for (const relatedCompanyId of company.Companies_fk_Companies) {
+        const relatedCompany = companyMap.get(relatedCompanyId)
+        if (relatedCompany && relatedCompany.deals) dealIds.add(relatedCompany.deals)
+      }
+    }
+  }
+  const dealIdsArray = Array.from(dealIds)
+
+  // 6. Batch fetch all deals
+  let deals: Deal[] = []
+  for (let i = 0; i < dealIdsArray.length; i += batchSize) {
+    const batch = dealIdsArray.slice(i, i + batchSize)
+    const { data, error } = await supabase
+      .from('Deals')
+      .select('whalesync_postgres_id, deal_stage, annual_contract_value, amount, deal_type, create_date')
+      .in('whalesync_postgres_id', batch)
+    if (error) continue
+    if (data) deals.push(...data)
+  }
+  const dealMap = new Map(deals.map(d => [d.whalesync_postgres_id, d]))
+
+  // 7. Map everything in-memory to aggregate per employee
+  const employeeMetricsMap = new Map<string, EmployeeMetrics>()
+  const now = new Date()
+
+  for (const meeting of meetings) {
+    const assignee = meeting.activity_assigned_to || 'Unassigned'
+    if (!employeeMetricsMap.has(assignee)) {
+      employeeMetricsMap.set(assignee, {
+        employee_name: assignee,
+        meeting_count: 0,
+        deals_won_count: 0,
+        deals_won_amount: 0,
+        deals_lost_count: 0,
+        deals_lost_amount: 0,
+        deals_in_play_under_150_count: 0,
+        deals_in_play_under_150_amount: 0,
+        deals_overdue_150_plus_count: 0,
+        deals_overdue_150_plus_amount: 0,
       })
     }
-  })
+    employeeMetricsMap.get(assignee)!.meeting_count++
 
-  // Group meetings by employee
-  const employeeMetricsMap = new Map<string, EmployeeMetrics>()
-
-  meetings.forEach(meeting => {
-    if (meeting.employee_name) {
-      if (!employeeMetricsMap.has(meeting.employee_name)) {
-        employeeMetricsMap.set(meeting.employee_name, {
-          employee_name: meeting.employee_name,
-          meeting_count: 0,
-          deals_won_count: 0,
-          deals_won_amount: 0,
-          deals_lost_count: 0,
-          deals_lost_amount: 0,
-          deals_in_play_under_150_count: 0,
-          deals_in_play_under_150_amount: 0,
-          deals_overdue_150_plus_count: 0,
-          deals_overdue_150_plus_amount: 0,
-        })
-      }
-      employeeMetricsMap.get(meeting.employee_name)!.meeting_count++
-    }
-  })
-
-  // Process deals and assign to employees
-  const now = new Date()
-  
-  deals.forEach(deal => {
-    if (deal.company_uuid && companyToEmployeeMap.has(deal.company_uuid)) {
-      const employeeNames = companyToEmployeeMap.get(deal.company_uuid)!
-      
-      employeeNames.forEach(employeeName => {
-        const metrics = employeeMetricsMap.get(employeeName)
-        if (!metrics) return
-
-        const amount = deal.amount || 0
-        const annualizedAmount = timePeriod === 'month_to_date' ? amount : amount * 12
-
-        if (deal.deal_status === 'Closed Won') {
-          metrics.deals_won_count++
-          metrics.deals_won_amount += annualizedAmount
-        } else if (deal.deal_status === 'Closed Lost') {
-          metrics.deals_lost_count++
-          metrics.deals_lost_amount += annualizedAmount
-        } else {
-          // Deal is in play, check days since creation
-          if (deal.create_date) {
-            const daysSinceCreation = differenceInDays(now, parseISO(deal.create_date))
-            
-            if (daysSinceCreation < 150) {
-              metrics.deals_in_play_under_150_count++
-              metrics.deals_in_play_under_150_amount += annualizedAmount
-            } else {
-              metrics.deals_overdue_150_plus_count++
-              metrics.deals_overdue_150_plus_amount += annualizedAmount
+    if (meeting.Contacts_fk_Contacts && meeting.Contacts_fk_Contacts.length > 0) {
+      for (const contactId of meeting.Contacts_fk_Contacts) {
+        const contact = contactMap.get(contactId)
+        if (!contact || !contact.companies) continue
+        const company = companyMap.get(contact.companies)
+        if (!company) continue
+        // Gather all deal UUIDs for this company and related companies
+        const allDealIds: string[] = []
+        if (company.deals) allDealIds.push(company.deals)
+        if (company.Companies_fk_Companies && Array.isArray(company.Companies_fk_Companies)) {
+          for (const relatedCompanyId of company.Companies_fk_Companies) {
+            const relatedCompany = companyMap.get(relatedCompanyId)
+            if (relatedCompany && relatedCompany.deals) allDealIds.push(relatedCompany.deals)
+          }
+        }
+        for (const dealId of allDealIds) {
+          const deal = dealMap.get(dealId)
+          if (!deal) continue
+          // Only include valid deal types
+          const validDealTypes = ['Monthly Service', 'Recurring Special Service']
+          if (!deal.deal_type || !validDealTypes.some(type => type.toLowerCase() === deal.deal_type.toLowerCase())) continue
+          // Calculate deal amount
+          let dealAmount = 0
+          if (deal.annual_contract_value && deal.annual_contract_value > 0) {
+            dealAmount = deal.annual_contract_value
+          } else if (deal.amount && deal.amount > 0) {
+            dealAmount = deal.amount
+          }
+          // Annualize unless month_to_date
+          const annualizedAmount = timePeriod === 'month_to_date' ? dealAmount : dealAmount * 12
+          const metrics = employeeMetricsMap.get(assignee)!
+          if (deal.deal_stage === 'Closed Won') {
+            metrics.deals_won_count++
+            metrics.deals_won_amount += annualizedAmount
+          } else if (deal.deal_stage === 'Closed Lost') {
+            metrics.deals_lost_count++
+            metrics.deals_lost_amount += annualizedAmount
+          } else {
+            if (deal.create_date) {
+              const daysSinceCreation = differenceInDays(now, parseISO(deal.create_date))
+              if (daysSinceCreation < 150) {
+                metrics.deals_in_play_under_150_count++
+                metrics.deals_in_play_under_150_amount += annualizedAmount
+              } else {
+                metrics.deals_overdue_150_plus_count++
+                metrics.deals_overdue_150_plus_amount += annualizedAmount
+              }
             }
           }
         }
-      })
+      }
     }
-  })
+  }
 
   return Array.from(employeeMetricsMap.values())
 } 
