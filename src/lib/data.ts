@@ -111,8 +111,8 @@ export async function getDealsFromCompanies(companies: Company[]): Promise<Deal[
   if (companyUuids.length === 0) return []
   const { data, error } = await supabase
     .from('Deals')
-    .select('*')
-    .in('companies', companyUuids)
+    .select('whalesync_postgres_id, companies, deal_stage, annual_contract_value, amount, deal_type, create_date, deal_name')
+    .in('whalesync_postgres_id', companyUuids)
     .in('deal_type', ['Monthly Service', 'Recurring Special Service'])
   if (error) {
     console.error('Error fetching deals:', error)
@@ -191,7 +191,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
     const batch = dealIdsArray.slice(i, i + batchSize)
     const { data, error } = await supabase
       .from('Deals')
-      .select('whalesync_postgres_id, deal_stage, annual_contract_value, amount, deal_type, create_date')
+      .select('whalesync_postgres_id, companies, deal_stage, annual_contract_value, amount, deal_type, create_date, deal_name')
       .in('whalesync_postgres_id', batch)
     if (error) continue
     if (data) deals.push(...data)
@@ -201,6 +201,8 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
   // 7. Map everything in-memory to aggregate per employee
   const employeeMetricsMap = new Map<string, EmployeeMetrics>()
   const now = new Date()
+  // Track all counted deals globally to dedupe by UUID
+  const countedDealIds = new Set<string>()
 
   for (const meeting of meetings) {
     const assignee = meeting.activity_assigned_to || 'Unassigned'
@@ -216,6 +218,8 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
         deals_in_play_under_150_amount: 0,
         deals_overdue_150_plus_count: 0,
         deals_overdue_150_plus_amount: 0,
+        deals_in_play_under_150_names: [],
+        deals_overdue_150_plus_names: [],
       })
     }
     employeeMetricsMap.get(assignee)!.meeting_count++
@@ -236,36 +240,35 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
           }
         }
         for (const dealId of allDealIds) {
+          if (!dealId || countedDealIds.has(dealId)) continue // Dedupe globally
+          countedDealIds.add(dealId)
           const deal = dealMap.get(dealId)
           if (!deal) continue
           // Only include valid deal types
           const validDealTypes = ['Monthly Service', 'Recurring Special Service']
-          if (!deal.deal_type || !validDealTypes.some(type => type.toLowerCase() === deal.deal_type.toLowerCase())) continue
+          if (!deal.deal_type || !validDealTypes.some(type => type.toLowerCase() === (deal.deal_type?.toLowerCase() ?? ''))) continue
           // Calculate deal amount
-          let dealAmount = 0
-          if (deal.annual_contract_value && deal.annual_contract_value > 0) {
-            dealAmount = deal.annual_contract_value
-          } else if (deal.amount && deal.amount > 0) {
-            dealAmount = deal.amount
-          }
-          // Annualize unless month_to_date
-          const annualizedAmount = timePeriod === 'month_to_date' ? dealAmount : dealAmount * 12
+          const isAnnualized = timePeriod === 'all_time' || timePeriod === 'year_to_date'
+          const dealValue = isAnnualized ? (deal.amount ?? 0) * 12 : (deal.amount ?? 0)
+          // Use dealValue in all aggregations for won, lost, in play, and overdue
           const metrics = employeeMetricsMap.get(assignee)!
           if (deal.deal_stage === 'Closed Won') {
             metrics.deals_won_count++
-            metrics.deals_won_amount += annualizedAmount
+            metrics.deals_won_amount += dealValue
           } else if (deal.deal_stage === 'Closed Lost') {
             metrics.deals_lost_count++
-            metrics.deals_lost_amount += annualizedAmount
+            metrics.deals_lost_amount += dealValue
           } else {
             if (deal.create_date) {
               const daysSinceCreation = differenceInDays(now, parseISO(deal.create_date))
               if (daysSinceCreation < 150) {
                 metrics.deals_in_play_under_150_count++
-                metrics.deals_in_play_under_150_amount += annualizedAmount
+                metrics.deals_in_play_under_150_amount += dealValue
+                if (deal.deal_name) metrics.deals_in_play_under_150_names.push(deal.deal_name)
               } else {
                 metrics.deals_overdue_150_plus_count++
-                metrics.deals_overdue_150_plus_amount += annualizedAmount
+                metrics.deals_overdue_150_plus_amount += dealValue
+                if (deal.deal_name) metrics.deals_overdue_150_plus_names.push(deal.deal_name)
               }
             }
           }

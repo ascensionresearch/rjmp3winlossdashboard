@@ -30,6 +30,7 @@ export interface Deal {
   deal_stage?: string
   amount?: number
   create_date?: string
+  deal_name?: string
   // Add other deal fields as needed
 }
 
@@ -44,6 +45,8 @@ export interface EmployeeMetrics {
   deals_in_play_under_150_amount: number
   deals_overdue_150_plus_count: number
   deals_overdue_150_plus_amount: number
+  deals_in_play_under_150_names: string[]
+  deals_overdue_150_plus_names: string[]
 }
 
 export type TimePeriod = 'all_time' | 'year_to_date' | 'month_to_date' 

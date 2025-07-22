@@ -110,10 +110,10 @@ export default function Dashboard() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            P3 Proposal Dashboard
+            P3 - Proposal and Deal Dashboard
           </h1>
           <p className="text-gray-600">
-            Track P3 proposal meetings and resulting deals performance across your team
+            Track P3 - Proposal meetings and the resulting deals performance across your team.
           </p>
         </div>
         {/* Time Period Selector */}

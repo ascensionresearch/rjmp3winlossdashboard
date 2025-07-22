@@ -1,7 +1,7 @@
 'use client'
 
 import { EmployeeMetrics } from '@/types/database'
-import { Target, TrendingUp, Users, Calendar } from 'lucide-react'
+import { Target, TrendingUp, Users, Calendar, Medal, User } from 'lucide-react'
 
 interface SummaryCardsProps {
   metrics: EmployeeMetrics[]
@@ -26,7 +26,7 @@ export default function SummaryCards({ metrics }: SummaryCardsProps) {
       title: 'Total P3 - Proposals',
       value: totalMeetings.toString(),
       subtitle: 'all time',
-      icon: Target,
+      icon: Calendar,
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50'
     },
@@ -34,7 +34,7 @@ export default function SummaryCards({ metrics }: SummaryCardsProps) {
       title: 'Top Performer',
       value: cleanEmployeeName(topPerformer.employee_name),
       subtitle: `${topPerformer.meeting_count} meetings`,
-      icon: TrendingUp,
+      icon: Medal,
       iconColor: 'text-orange-600',
       bgColor: 'bg-orange-50'
     },
@@ -42,7 +42,7 @@ export default function SummaryCards({ metrics }: SummaryCardsProps) {
       title: 'Average per Employee',
       value: averagePerEmployee.toString(),
       subtitle: 'meetings per person',
-      icon: Calendar,
+      icon: User,
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50'
     },

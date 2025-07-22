@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { EmployeeMetrics, TimePeriod } from '@/types/database'
+import { createPortal } from 'react-dom'
 
 interface EmployeeTableProps {
   metrics: EmployeeMetrics[]
@@ -57,7 +58,13 @@ function DealBarChartLabeled({ won, lost, inPlay, overdue, amounts }: { won: num
 }
 
 export default function EmployeeTable({ metrics, timePeriod }: EmployeeTableProps) {
+  console.log('EmployeeTable metrics:', metrics)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  // Tooltip state
+  const [tooltip, setTooltip] = useState<null | {
+    x: number, y: number, names: string[], label: string
+  }>(null)
+  const tableRef = useRef<HTMLTableElement>(null)
 
   function handleExpand(idx: number) {
     setExpandedRows(prev => {
@@ -68,10 +75,36 @@ export default function EmployeeTable({ metrics, timePeriod }: EmployeeTableProp
     })
     if (expandedRows.has(idx)) {
       console.log(`DEBUG: Deal UUIDs for ${cleanEmployeeName(metrics[idx].employee_name)}`)
-      console.log('Deals In Play UUIDs:', metrics[idx].deals_in_play_under_150_uuids || [])
-      console.log('Deals Overdue UUIDs:', metrics[idx].deals_overdue_150_plus_uuids || [])
+      // Removed references to deals_in_play_under_150_uuids and deals_overdue_150_plus_uuids
     }
   }
+
+  function handleShowTooltip(e: React.MouseEvent, names: string[], label: string) {
+    const rect = (e.target as HTMLElement).getBoundingClientRect()
+    setTooltip({
+      x: rect.left + rect.width / 2,
+      y: rect.bottom + 8, // 8px below
+      names,
+      label
+    })
+  }
+  function handleHideTooltip() {
+    setTooltip(null)
+  }
+
+  // Calculate averages for the bottom row
+  const totalEmployees = metrics.length
+  const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0
+  const avgDollar = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0
+  const avgMeeting = avg(metrics.map(m => m.meeting_count))
+  const avgWon = avg(metrics.map(m => m.deals_won_count))
+  const avgLost = avg(metrics.map(m => m.deals_lost_count))
+  const avgInPlay = avg(metrics.map(m => m.deals_in_play_under_150_count))
+  const avgOverdue = avg(metrics.map(m => m.deals_overdue_150_plus_count))
+  const avgWonAmt = avgDollar(metrics.map(m => m.deals_won_amount))
+  const avgLostAmt = avgDollar(metrics.map(m => m.deals_lost_amount))
+  const avgInPlayAmt = avgDollar(metrics.map(m => m.deals_in_play_under_150_amount))
+  const avgOverdueAmt = avgDollar(metrics.map(m => m.deals_overdue_150_plus_amount))
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
@@ -80,95 +113,103 @@ export default function EmployeeTable({ metrics, timePeriod }: EmployeeTableProp
           Employee Performance
         </h3>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Meetings</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deals Won</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deals Lost</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">In Play {'<'}150 Days</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overdue 150+ Days</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {metrics.map((metric, idx) => {
-              const cleanedName = cleanEmployeeName(metric.employee_name)
-              return (
-                <>
-                  <tr key={metric.employee_name} className="cursor-pointer" onClick={() => handleExpand(idx)}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{cleanedName}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{metric.meeting_count}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700">{metric.deals_won_count}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-red-700">{metric.deals_lost_count}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-700 relative group">
+      {/* Remove overflow-x-auto */}
+      <table ref={tableRef} className="min-w-full table-fixed divide-y divide-gray-200 bg-white">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Meetings</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deals Won</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deals Lost</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">In Play {'<'}150 Days</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overdue 150+ Days</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {metrics.map((metric, idx) => {
+            const cleanedName = cleanEmployeeName(metric.employee_name)
+            return (
+              <>
+                <tr key={metric.employee_name} className="cursor-pointer" onClick={() => handleExpand(idx)}>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{cleanedName}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{metric.meeting_count}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-green-700">{metric.deals_won_count}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-red-700">{metric.deals_lost_count}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-700 relative group">
+                    <span
+                      onMouseEnter={e => metric.deals_in_play_under_150_names?.length > 0 && handleShowTooltip(e, metric.deals_in_play_under_150_names, 'In Play Deals')}
+                      onMouseLeave={handleHideTooltip}
+                      style={{ cursor: metric.deals_in_play_under_150_names?.length > 0 ? 'pointer' : undefined }}
+                    >
                       {metric.deals_in_play_under_150_count}
-                      {metric.deals_in_play_under_150_names && metric.deals_in_play_under_150_names.length > 0 && (
-                        <div className="absolute left-1/2 top-full z-10 mt-2 w-64 bg-white border border-gray-300 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-150" style={{ transform: 'translateX(-50%)' }}>
-                          <div className="p-2">
-                            <div className="font-semibold text-xs mb-1">In Play Deals</div>
-                            <table className="w-full text-xs">
-                              <tbody>
-                                {metric.deals_in_play_under_150_names.map((name, i) => (
-                                  <tr key={i}><td className="py-1 px-2">{name}</td></tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-orange-700 relative group">
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-orange-700 relative group">
+                    <span
+                      onMouseEnter={e => metric.deals_overdue_150_plus_names?.length > 0 && handleShowTooltip(e, metric.deals_overdue_150_plus_names, 'Overdue Deals')}
+                      onMouseLeave={handleHideTooltip}
+                      style={{ cursor: metric.deals_overdue_150_plus_names?.length > 0 ? 'pointer' : undefined }}
+                    >
                       {metric.deals_overdue_150_plus_count}
-                      {metric.deals_overdue_150_plus_names && metric.deals_overdue_150_plus_names.length > 0 && (
-                        <div className="absolute left-1/2 top-full z-10 mt-2 w-64 bg-white border border-gray-300 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-150" style={{ transform: 'translateX(-50%)' }}>
-                          <div className="p-2">
-                            <div className="font-semibold text-xs mb-1">Overdue Deals</div>
-                            <table className="w-full text-xs">
-                              <tbody>
-                                {metric.deals_overdue_150_plus_names.map((name, i) => (
-                                  <tr key={i}><td className="py-1 px-2">{name}</td></tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                    </span>
+                  </td>
+                </tr>
+                {expandedRows.has(idx) && (
+                  <tr>
+                    <td colSpan={6} className="bg-gray-50 px-6 py-8">
+                      <div className="flex flex-col items-center">
+                        <DealBarChartLabeled
+                          won={metric.deals_won_count}
+                          lost={metric.deals_lost_count}
+                          inPlay={metric.deals_in_play_under_150_count}
+                          overdue={metric.deals_overdue_150_plus_count}
+                          amounts={{
+                            won: metric.deals_won_amount,
+                            lost: metric.deals_lost_amount,
+                            inPlay: metric.deals_in_play_under_150_amount,
+                            overdue: metric.deals_overdue_150_plus_amount
+                          }}
+                        />
+                        <div className="flex gap-8 mt-4">
+                          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:'#16a34a'}}></span>Won</div>
+                          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:'#dc2626'}}></span>Lost</div>
+                          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:'#2563eb'}}></span>In Play</div>
+                          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:'#ea580c'}}></span>Overdue</div>
                         </div>
-                      )}
+                      </div>
                     </td>
                   </tr>
-                  {expandedRows.has(idx) && (
-                    <tr>
-                      <td colSpan={6} className="bg-gray-50 px-6 py-8">
-                        <div className="flex flex-col items-center">
-                          <DealBarChartLabeled
-                            won={metric.deals_won_count}
-                            lost={metric.deals_lost_count}
-                            inPlay={metric.deals_in_play_under_150_count}
-                            overdue={metric.deals_overdue_150_plus_count}
-                            amounts={{
-                              won: metric.deals_won_amount,
-                              lost: metric.deals_lost_amount,
-                              inPlay: metric.deals_in_play_under_150_amount,
-                              overdue: metric.deals_overdue_150_plus_amount
-                            }}
-                          />
-                          <div className="flex gap-8 mt-4">
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:'#16a34a'}}></span>Won</div>
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:'#dc2626'}}></span>Lost</div>
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:'#2563eb'}}></span>In Play</div>
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:'#ea580c'}}></span>Overdue</div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+                )}
+              </>
+            )
+          })}
+          <tr className="bg-gray-50 font-semibold">
+            <td className="px-4 py-3 text-sm text-gray-700">Employee Averages</td>
+            <td className="px-4 py-3 text-sm text-gray-700">{avgMeeting}</td>
+            <td className="px-4 py-3 text-sm text-green-700">{avgWon} <span className="text-xs text-gray-500">(${avgWonAmt.toLocaleString()})</span></td>
+            <td className="px-4 py-3 text-sm text-red-700">{avgLost} <span className="text-xs text-gray-500">(${avgLostAmt.toLocaleString()})</span></td>
+            <td className="px-4 py-3 text-sm text-blue-700">{avgInPlay} <span className="text-xs text-gray-500">(${avgInPlayAmt.toLocaleString()})</span></td>
+            <td className="px-4 py-3 text-sm text-orange-700">{avgOverdue} <span className="text-xs text-gray-500">(${avgOverdueAmt.toLocaleString()})</span></td>
+          </tr>
+        </tbody>
+      </table>
+      {/* Tooltip rendered outside card using portal */}
+      {tooltip && createPortal(
+        <div
+          className="z-50 w-96 bg-white border border-gray-300 rounded shadow-lg p-2 fixed"
+          style={{ left: tooltip.x, top: tooltip.y, transform: 'translate(-50%, 0)' }}
+        >
+          <div className="font-semibold text-xs mb-1">{tooltip.label}</div>
+          <table className="w-full text-xs whitespace-nowrap">
+            <tbody>
+              {tooltip.names.map((name, i) => (
+                <tr key={i}><td className="py-1 px-2 whitespace-nowrap">{name}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+        document.body
+      )}
     </div>
   )
 } 
