@@ -70,8 +70,8 @@ export default function Dashboard() {
               No P3 proposal meetings were found in your database for the selected time period.
             </p>
             <div className="space-y-2 text-sm text-gray-500">
-              <p>• Check that meetings have <code>meeting_outcome="P3 - Proposal"</code></p>
-              <p>• Or <code>call_and_meeting_type="P3 - Proposal"</code> with <code>meeting_outcome="Completed"</code></p>
+              <p>• Check that meetings have <code>meeting_outcome=&quot;P3 - Proposal&quot;</code></p>
+              <p>• Or <code>call_and_meeting_type=&quot;P3 - Proposal&quot;</code> with <code>meeting_outcome=&quot;Completed&quot;</code></p>
               <p>• Verify that meetings have <code>employee_name</code> values</p>
             </div>
             <a 

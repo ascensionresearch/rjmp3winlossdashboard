@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getP3Meetings, getContactsFromMeetings, getCompaniesFromContacts, getDealsFromCompanies } from '@/lib/data'
+import Link from 'next/link'
 
 export default function DebugPage() {
   const [logs, setLogs] = useState<string[]>([])
@@ -203,12 +204,12 @@ export default function DebugPage() {
         </div>
 
         <div className="mt-6">
-          <a 
+          <Link 
             href="/" 
             className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           >
             Back to Dashboard
-          </a>
+          </Link>
         </div>
       </div>
     </div>

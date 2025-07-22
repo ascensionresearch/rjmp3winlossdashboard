@@ -1,7 +1,7 @@
 'use client'
 
 import { EmployeeMetrics } from '@/types/database'
-import { Target, TrendingUp, Users, Calendar, Medal, User } from 'lucide-react'
+import { Users, Calendar, Medal, User } from 'lucide-react'
 
 interface SummaryCardsProps {
   metrics: EmployeeMetrics[]

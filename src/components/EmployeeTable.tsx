@@ -57,7 +57,7 @@ function DealBarChartLabeled({ won, lost, inPlay, overdue, amounts }: { won: num
   )
 }
 
-export default function EmployeeTable({ metrics, timePeriod }: EmployeeTableProps) {
+export default function EmployeeTable({ metrics }: EmployeeTableProps) {
   console.log('EmployeeTable metrics:', metrics)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   // Tooltip state
@@ -93,7 +93,6 @@ export default function EmployeeTable({ metrics, timePeriod }: EmployeeTableProp
   }
 
   // Calculate averages for the bottom row
-  const totalEmployees = metrics.length
   const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0
   const avgDollar = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0
   const avgMeeting = avg(metrics.map(m => m.meeting_count))

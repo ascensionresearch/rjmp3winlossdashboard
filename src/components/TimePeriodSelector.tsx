@@ -1,7 +1,6 @@
 'use client'
 
 import { TimePeriod } from '@/types/database'
-import { Calendar, Clock, Infinity } from 'lucide-react'
 
 interface TimePeriodSelectorProps {
   selectedPeriod: TimePeriod

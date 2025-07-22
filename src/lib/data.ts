@@ -139,7 +139,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
   const contactIdsArray = Array.from(contactIds)
 
   // 2. Batch fetch all contacts
-  let contacts: Contact[] = []
+  const contacts: Contact[] = []
   const batchSize = 100
   for (let i = 0; i < contactIdsArray.length; i += batchSize) {
     const batch = contactIdsArray.slice(i, i + batchSize)
@@ -160,7 +160,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
   const companyIdsArray = Array.from(companyIds)
 
   // 4. Batch fetch all companies
-  let companies: Company[] = []
+  const companies: Company[] = []
   for (let i = 0; i < companyIdsArray.length; i += batchSize) {
     const batch = companyIdsArray.slice(i, i + batchSize)
     const { data, error } = await supabase
@@ -186,7 +186,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
   const dealIdsArray = Array.from(dealIds)
 
   // 6. Batch fetch all deals
-  let deals: Deal[] = []
+  const deals: Deal[] = []
   for (let i = 0; i < dealIdsArray.length; i += batchSize) {
     const batch = dealIdsArray.slice(i, i + batchSize)
     const { data, error } = await supabase
