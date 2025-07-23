@@ -3,6 +3,8 @@ export interface Meeting {
   meeting_outcome?: string
   call_and_meeting_type?: string
   Contacts_fk_Contacts?: string[] // Array of contact UUIDs
+  Companies_fk_Companies?: string[] // Array of company UUIDs
+  Deals_fk_Deals?: string[] // Array of deal UUIDs
   activity_assigned_to?: string
   create_date?: string
   // Add other meeting fields as needed

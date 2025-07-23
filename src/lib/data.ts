@@ -129,7 +129,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
   const meetings = await getP3Meetings(timePeriod)
   console.log(`Found ${meetings.length} P3 meetings`)
 
-  // 1. Collect all unique contact UUIDs from meetings
+  // 1. Collect all unique contact UUIDs from meetings (for fallback)
   const contactIds = new Set<string>()
   meetings.forEach(meeting => {
     if (meeting.Contacts_fk_Contacts) {
@@ -138,67 +138,97 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
   })
   const contactIdsArray = Array.from(contactIds)
 
-  // 2. Batch fetch all contacts
+  // 2. Collect all unique company UUIDs from meetings (new direct company links)
+  const directCompanyIds = new Set<string>()
+  meetings.forEach(meeting => {
+    if (meeting.Companies_fk_Companies) {
+      meeting.Companies_fk_Companies.forEach(id => directCompanyIds.add(id))
+    }
+  })
+
+  // 3. Collect all unique deal UUIDs from meetings (new direct deal links)
+  const directDealIds = new Set<string>()
+  meetings.forEach(meeting => {
+    if (meeting.Deals_fk_Deals) {
+      meeting.Deals_fk_Deals.forEach(id => directDealIds.add(id))
+    }
+  })
+
+  // 4. Batch fetch all contacts (for fallback)
   const contacts: Contact[] = []
-  const batchSize = 100
-  for (let i = 0; i < contactIdsArray.length; i += batchSize) {
-    const batch = contactIdsArray.slice(i, i + batchSize)
-    const { data, error } = await supabase
-      .from('Contacts')
-      .select('whalesync_postgres_id, companies')
-      .in('whalesync_postgres_id', batch)
-    if (error) continue
-    if (data) contacts.push(...data)
+  if (contactIdsArray.length > 0) {
+    const batchSize = 100
+    for (let i = 0; i < contactIdsArray.length; i += batchSize) {
+      const batch = contactIdsArray.slice(i, i + batchSize)
+      const { data, error } = await supabase
+        .from('Contacts')
+        .select('whalesync_postgres_id, companies')
+        .in('whalesync_postgres_id', batch)
+      if (error) continue
+      if (data) contacts.push(...data)
+    }
   }
   const contactMap = new Map(contacts.map(c => [c.whalesync_postgres_id, c]))
 
-  // 3. Collect all unique company UUIDs from contacts
-  const companyIds = new Set<string>()
+  // 5. Collect all unique company UUIDs from contacts (for fallback)
+  const fallbackCompanyIds = new Set<string>()
   contacts.forEach(contact => {
-    if (contact.companies) companyIds.add(contact.companies)
+    if (contact.companies) fallbackCompanyIds.add(contact.companies)
   })
-  const companyIdsArray = Array.from(companyIds)
 
-  // 4. Batch fetch all companies
+  // 6. Combine all company UUIDs (direct + fallback)
+  const allCompanyIds = new Set([...directCompanyIds, ...fallbackCompanyIds])
+  const allCompanyIdsArray = Array.from(allCompanyIds)
+
+  // 7. Batch fetch all companies
   const companies: Company[] = []
-  for (let i = 0; i < companyIdsArray.length; i += batchSize) {
-    const batch = companyIdsArray.slice(i, i + batchSize)
-    const { data, error } = await supabase
-      .from('Companies')
-      .select('whalesync_postgres_id, deals, Companies_fk_Companies')
-      .in('whalesync_postgres_id', batch)
-    if (error) continue
-    if (data) companies.push(...data)
+  if (allCompanyIdsArray.length > 0) {
+    const batchSize = 100
+    for (let i = 0; i < allCompanyIdsArray.length; i += batchSize) {
+      const batch = allCompanyIdsArray.slice(i, i + batchSize)
+      const { data, error } = await supabase
+        .from('Companies')
+        .select('whalesync_postgres_id, deals, Companies_fk_Companies')
+        .in('whalesync_postgres_id', batch)
+      if (error) continue
+      if (data) companies.push(...data)
+    }
   }
   const companyMap = new Map(companies.map(c => [c.whalesync_postgres_id, c]))
 
-  // 5. Collect all unique deal UUIDs from companies and related companies
-  const dealIds = new Set<string>()
+  // 8. Collect all unique deal UUIDs from companies and related companies (for fallback)
+  const fallbackDealIds = new Set<string>()
   for (const company of companies) {
-    if (company.deals) dealIds.add(company.deals)
+    if (company.deals) fallbackDealIds.add(company.deals)
     if (company.Companies_fk_Companies && Array.isArray(company.Companies_fk_Companies)) {
       for (const relatedCompanyId of company.Companies_fk_Companies) {
         const relatedCompany = companyMap.get(relatedCompanyId)
-        if (relatedCompany && relatedCompany.deals) dealIds.add(relatedCompany.deals)
+        if (relatedCompany && relatedCompany.deals) fallbackDealIds.add(relatedCompany.deals)
       }
     }
   }
-  const dealIdsArray = Array.from(dealIds)
 
-  // 6. Batch fetch all deals
+  // 9. Combine all deal UUIDs (direct + fallback)
+  const allDealIds = new Set([...directDealIds, ...fallbackDealIds])
+  const allDealIdsArray = Array.from(allDealIds)
+
+  // 10. Batch fetch all deals
   const deals: Deal[] = []
-  for (let i = 0; i < dealIdsArray.length; i += batchSize) {
-    const batch = dealIdsArray.slice(i, i + batchSize)
-    const { data, error } = await supabase
-      .from('Deals')
-      .select('whalesync_postgres_id, companies, deal_stage, annual_contract_value, amount, deal_type, create_date, deal_name')
-      .in('whalesync_postgres_id', batch)
-    if (error) continue
-    if (data) deals.push(...data)
+  if (allDealIdsArray.length > 0) {
+    const batchSize = 100
+    for (let i = 0; i < allDealIdsArray.length; i += batchSize) {
+      const batch = allDealIdsArray.slice(i, i + batchSize)
+      const { data, error } = await supabase
+        .from('Deals')
+        .select('whalesync_postgres_id, companies, deal_stage, annual_contract_value, amount, deal_type, create_date, deal_name')
+        .in('whalesync_postgres_id', batch)
+      if (error) continue
+      if (data) deals.push(...data)
+    }
   }
   const dealMap = new Map(deals.map(d => [d.whalesync_postgres_id, d]))
 
-  // 7. Map everything in-memory to aggregate per employee
+  // 11. Map everything in-memory to aggregate per employee
   const employeeMetricsMap = new Map<string, EmployeeMetrics>()
   const now = new Date()
   // Track all counted deals globally to dedupe by UUID
@@ -224,7 +254,95 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
     }
     employeeMetricsMap.get(assignee)!.meeting_count++
 
-    if (meeting.Contacts_fk_Contacts && meeting.Contacts_fk_Contacts.length > 0) {
+    // Priority 1: Direct deals from Deals_fk_Deals
+    if (meeting.Deals_fk_Deals && meeting.Deals_fk_Deals.length > 0) {
+      for (const dealId of meeting.Deals_fk_Deals) {
+        if (!dealId || countedDealIds.has(dealId)) continue // Dedupe globally
+        countedDealIds.add(dealId)
+        const deal = dealMap.get(dealId)
+        if (!deal) continue
+        // Only include valid deal types
+        const validDealTypes = ['Monthly Service', 'Recurring Special Service']
+        if (!deal.deal_type || !validDealTypes.some(type => type.toLowerCase() === (deal.deal_type?.toLowerCase() ?? ''))) continue
+        // Calculate deal amount
+        const isAnnualized = timePeriod === 'all_time' || timePeriod === 'year_to_date'
+        const dealValue = isAnnualized ? (deal.amount ?? 0) * 12 : (deal.amount ?? 0)
+        // Use dealValue in all aggregations for won, lost, in play, and overdue
+        const metrics = employeeMetricsMap.get(assignee)!
+        if (deal.deal_stage === 'Closed Won') {
+          metrics.deals_won_count++
+          metrics.deals_won_amount += dealValue
+        } else if (deal.deal_stage === 'Closed Lost') {
+          metrics.deals_lost_count++
+          metrics.deals_lost_amount += dealValue
+        } else {
+          if (deal.create_date) {
+            const daysSinceCreation = differenceInDays(now, parseISO(deal.create_date))
+            if (daysSinceCreation < 150) {
+              metrics.deals_in_play_under_150_count++
+              metrics.deals_in_play_under_150_amount += dealValue
+              if (deal.deal_name) metrics.deals_in_play_under_150_names.push(deal.deal_name)
+            } else {
+              metrics.deals_overdue_150_plus_count++
+              metrics.deals_overdue_150_plus_amount += dealValue
+              if (deal.deal_name) metrics.deals_overdue_150_plus_names.push(deal.deal_name)
+            }
+          }
+        }
+      }
+    }
+    // Priority 2: Companies from Companies_fk_Companies, then deals from those companies
+    else if (meeting.Companies_fk_Companies && meeting.Companies_fk_Companies.length > 0) {
+      for (const companyId of meeting.Companies_fk_Companies) {
+        const company = companyMap.get(companyId)
+        if (!company) continue
+        // Gather all deal UUIDs for this company and related companies
+        const allDealIds: string[] = []
+        if (company.deals) allDealIds.push(company.deals)
+        if (company.Companies_fk_Companies && Array.isArray(company.Companies_fk_Companies)) {
+          for (const relatedCompanyId of company.Companies_fk_Companies) {
+            const relatedCompany = companyMap.get(relatedCompanyId)
+            if (relatedCompany && relatedCompany.deals) allDealIds.push(relatedCompany.deals)
+          }
+        }
+        for (const dealId of allDealIds) {
+          if (!dealId || countedDealIds.has(dealId)) continue // Dedupe globally
+          countedDealIds.add(dealId)
+          const deal = dealMap.get(dealId)
+          if (!deal) continue
+          // Only include valid deal types
+          const validDealTypes = ['Monthly Service', 'Recurring Special Service']
+          if (!deal.deal_type || !validDealTypes.some(type => type.toLowerCase() === (deal.deal_type?.toLowerCase() ?? ''))) continue
+          // Calculate deal amount
+          const isAnnualized = timePeriod === 'all_time' || timePeriod === 'year_to_date'
+          const dealValue = isAnnualized ? (deal.amount ?? 0) * 12 : (deal.amount ?? 0)
+          // Use dealValue in all aggregations for won, lost, in play, and overdue
+          const metrics = employeeMetricsMap.get(assignee)!
+          if (deal.deal_stage === 'Closed Won') {
+            metrics.deals_won_count++
+            metrics.deals_won_amount += dealValue
+          } else if (deal.deal_stage === 'Closed Lost') {
+            metrics.deals_lost_count++
+            metrics.deals_lost_amount += dealValue
+          } else {
+            if (deal.create_date) {
+              const daysSinceCreation = differenceInDays(now, parseISO(deal.create_date))
+              if (daysSinceCreation < 150) {
+                metrics.deals_in_play_under_150_count++
+                metrics.deals_in_play_under_150_amount += dealValue
+                if (deal.deal_name) metrics.deals_in_play_under_150_names.push(deal.deal_name)
+              } else {
+                metrics.deals_overdue_150_plus_count++
+                metrics.deals_overdue_150_plus_amount += dealValue
+                if (deal.deal_name) metrics.deals_overdue_150_plus_names.push(deal.deal_name)
+              }
+            }
+          }
+        }
+      }
+    }
+    // Priority 3: Fallback to existing contacts > companies > deals process
+    else if (meeting.Contacts_fk_Contacts && meeting.Contacts_fk_Contacts.length > 0) {
       for (const contactId of meeting.Contacts_fk_Contacts) {
         const contact = contactMap.get(contactId)
         if (!contact || !contact.companies) continue
