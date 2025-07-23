@@ -2,34 +2,114 @@ import { supabase } from './supabase'
 import { Meeting, Contact, Company, Deal, EmployeeMetrics, TimePeriod } from '@/types/database'
 import { startOfYear, startOfMonth, parseISO, differenceInDays } from 'date-fns'
 
+// Retry mechanism for temporary connectivity issues
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt)
+      console.log(`Attempt ${attempt + 1} failed, retrying in ${delay}ms...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+  throw new Error('Max retries exceeded')
+}
+
 export async function getP3Meetings(timePeriod: TimePeriod = 'all_time'): Promise<Meeting[]> {
-  let query = supabase
-    .from('Meetings')
-    .select('*')
-    .or('meeting_outcome.eq.P3 - Proposal,and(call_and_meeting_type.eq.P3 - Proposal,meeting_outcome.eq.Completed)')
+  console.log(`Fetching P3 meetings for time period: ${timePeriod}`)
+  
+  return retryWithBackoff(async () => {
+    // First, let's get all meetings to see what we have
+    let allMeetingsQuery = supabase
+      .from('Meetings')
+      .select('*')
+      .limit(100)
 
-  // Apply time filtering
-  if (timePeriod !== 'all_time') {
-    const now = new Date()
-    let startDate: Date
+    console.log('First, checking all meetings...')
+    const { data: allMeetings, error: allError } = await allMeetingsQuery
 
-    if (timePeriod === 'year_to_date') {
-      startDate = startOfYear(now)
-    } else {
-      startDate = startOfMonth(now)
+    if (allError) {
+      console.error('Error fetching all meetings:', allError)
+      throw allError
     }
 
-    query = query.gte('create_date', startDate.toISOString())
-  }
+    console.log(`Found ${allMeetings?.length || 0} total meetings`)
+    
+    // Log some sample meetings to see their structure
+    if (allMeetings && allMeetings.length > 0) {
+      console.log('Sample meetings:')
+      allMeetings.slice(0, 3).forEach((meeting, index) => {
+        console.log(`  Meeting ${index + 1}:`, meeting)
+      })
+    }
 
-  const { data, error } = await query
+    // Now try the P3 query
+    let query = supabase
+      .from('Meetings')
+      .select('*')
+      .or('meeting_outcome.eq.P3 - Proposal,and(call_and_meeting_type.eq.P3 - Proposal,meeting_outcome.eq.Completed)')
 
-  if (error) {
-    console.error('Error fetching P3 meetings:', error)
-    return []
-  }
+    // Apply time filtering
+    if (timePeriod !== 'all_time') {
+      const now = new Date()
+      let startDate: Date
 
-  return data || []
+      if (timePeriod === 'year_to_date') {
+        startDate = startOfYear(now)
+      } else {
+        startDate = startOfMonth(now)
+      }
+
+      query = query.gte('create_date', startDate.toISOString())
+      console.log(`Applied time filter: >= ${startDate.toISOString()}`)
+    }
+
+    console.log('Executing P3 meetings query...')
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching P3 meetings:', error)
+      console.error('Error details:', JSON.stringify(error, null, 2))
+      throw error // Throw to trigger retry
+    }
+
+    console.log(`Successfully fetched ${data?.length || 0} P3 meetings`)
+    
+    // If no P3 meetings found, let's try a broader search
+    if (!data || data.length === 0) {
+      console.log('No P3 meetings found, trying broader search...')
+      
+      // Try searching for any meeting with "P3" in the name
+      const { data: broaderData, error: broaderError } = await supabase
+        .from('Meetings')
+        .select('*')
+        .or('meeting_outcome.ilike.%P3%,call_and_meeting_type.ilike.%P3%')
+        .limit(50)
+
+      if (broaderError) {
+        console.error('Broader search error:', broaderError)
+      } else {
+        console.log(`Broader search found ${broaderData?.length || 0} meetings with "P3"`)
+        if (broaderData && broaderData.length > 0) {
+          console.log('Sample broader results:')
+          broaderData.slice(0, 3).forEach((meeting, index) => {
+            console.log(`  Meeting ${index + 1}:`, meeting)
+          })
+        }
+      }
+    }
+
+    return data || []
+  })
 }
 
 export async function getContactsFromMeetings(meetings: Meeting[]): Promise<Contact[]> {
@@ -256,6 +336,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
 
     // Priority 1: Direct deals from Deals_fk_Deals
     if (meeting.Deals_fk_Deals && meeting.Deals_fk_Deals.length > 0) {
+      console.log(`Meeting ${meeting.id}: Using Priority 1 - Direct deals (${meeting.Deals_fk_Deals.length} deals)`)
       for (const dealId of meeting.Deals_fk_Deals) {
         if (!dealId || countedDealIds.has(dealId)) continue // Dedupe globally
         countedDealIds.add(dealId)
@@ -293,6 +374,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
     }
     // Priority 2: Companies from Companies_fk_Companies, then deals from those companies
     else if (meeting.Companies_fk_Companies && meeting.Companies_fk_Companies.length > 0) {
+      console.log(`Meeting ${meeting.id}: Using Priority 2 - Company-linked deals (${meeting.Companies_fk_Companies.length} companies)`)
       for (const companyId of meeting.Companies_fk_Companies) {
         const company = companyMap.get(companyId)
         if (!company) continue
@@ -343,6 +425,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
     }
     // Priority 3: Fallback to existing contacts > companies > deals process
     else if (meeting.Contacts_fk_Contacts && meeting.Contacts_fk_Contacts.length > 0) {
+      console.log(`Meeting ${meeting.id}: Using Priority 3 - Contact-linked deals (${meeting.Contacts_fk_Contacts.length} contacts)`)
       for (const contactId of meeting.Contacts_fk_Contacts) {
         const contact = contactMap.get(contactId)
         if (!contact || !contact.companies) continue
@@ -392,6 +475,8 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time'): P
           }
         }
       }
+    } else {
+      console.log(`Meeting ${meeting.id}: No deals found (no contacts, companies, or direct deals)`)
     }
   }
 

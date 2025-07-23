@@ -1,112 +1,108 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { EmployeeMetrics, TimePeriod } from '@/types/database'
 import { getEmployeeMetrics } from '@/lib/data'
+import { EmployeeMetrics, TimePeriod } from '@/types/database'
 import TimePeriodSelector from '@/components/TimePeriodSelector'
 import SummaryCards from '@/components/SummaryCards'
 import EmployeeTable from '@/components/EmployeeTable'
-import { Loader2, AlertCircle } from 'lucide-react'
 
 export default function Dashboard() {
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>('all_time')
+  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('all_time')
   const [metrics, setMetrics] = useState<EmployeeMetrics[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking')
+
+  const fetchData = async () => {
+    setLoading(true)
+    setError(null)
+    setConnectionStatus('checking')
+    
+    try {
+      console.log('Starting data fetch...')
+      const data = await getEmployeeMetrics(selectedPeriod)
+      setMetrics(data)
+      setConnectionStatus('connected')
+      console.log('Data fetch completed successfully')
+    } catch (err) {
+      console.error('Error fetching data:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+      setError(errorMessage)
+      setConnectionStatus('disconnected')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      setError(null)
-      
-      try {
-        console.log('Fetching data for time period:', timePeriod)
-        
-        // Add timeout to prevent hanging
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), 30000)
-        )
-        
-        const dataPromise = getEmployeeMetrics(timePeriod)
-        const data = await Promise.race([dataPromise, timeoutPromise]) as EmployeeMetrics[]
-        
-        console.log('Received data:', data)
-        setMetrics(data)
-      } catch (err) {
-        console.error('Error fetching data:', err)
-        setError(`Failed to load dashboard data: ${err instanceof Error ? err.message : 'Unknown error'}. Please check your connection and try again.`)
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchData()
-  }, [timePeriod])
+  }, [selectedPeriod])
 
-  const handlePeriodChange = (newPeriod: TimePeriod) => {
-    setTimePeriod(newPeriod)
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading Dashboard</h2>
-          <p className="text-gray-600">Fetching P3 meeting and deal data...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Show empty state if no data
-  if (metrics.length === 0 && !error) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto">
-          <div className="bg-white p-8 rounded-lg shadow-sm border">
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">No P3 Meetings Found</h2>
-            <p className="text-gray-600 mb-4">
-              No P3 proposal meetings were found in your database for the selected time period.
-            </p>
-            <div className="space-y-2 text-sm text-gray-500">
-              <p>• Check that meetings have <code>meeting_outcome=&quot;P3 - Proposal&quot;</code></p>
-              <p>• Or <code>call_and_meeting_type=&quot;P3 - Proposal&quot;</code> with <code>meeting_outcome=&quot;Completed&quot;</code></p>
-              <p>• Verify that meetings have <code>employee_name</code> values</p>
-            </div>
-            <a 
-              href="/debug" 
-              className="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            >
-              Debug Database
-            </a>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto">
-          <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Dashboard</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    )
+  const handleRetry = () => {
+    fetchData()
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Connection Status */}
+        {connectionStatus === 'disconnected' && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">
+                    Supabase Security Issue Detected
+                  </h3>
+                  <div className="mt-2 text-sm text-red-700">
+                    <p>Your Supabase instance appears to have SSL certificate and security issues.</p>
+                    <p className="mt-1">This affects both local development and production deployments.</p>
+                    {error && <p className="mt-1 font-mono text-xs">Error: {error}</p>}
+                    <div className="mt-2 text-xs">
+                      <p><strong>Recommended actions:</strong></p>
+                      <ul className="list-disc list-inside mt-1 space-y-1">
+                        <li>Contact Supabase support about instance security</li>
+                        <li>Check your Supabase dashboard for alerts</li>
+                        <li>Consider migrating to a new Supabase instance</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={handleRetry}
+                className="bg-red-100 text-red-800 px-3 py-2 rounded-md text-sm font-medium hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                Retry Connection
+              </button>
+            </div>
+          </div>
+        )}
+
+        {connectionStatus === 'checking' && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="animate-spin h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-blue-800">
+                  Connecting to Database...
+                </h3>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -116,14 +112,34 @@ export default function Dashboard() {
             Track P3 - Proposal meetings and the resulting deals performance across your team.
           </p>
         </div>
+
         {/* Time Period Selector */}
-        <TimePeriodSelector selectedPeriod={timePeriod} onPeriodChange={handlePeriodChange} />
-        {/* Summary Cards */}
-        <div className="mb-8">
-          <SummaryCards metrics={metrics} />
-        </div>
-        {/* Employee Performance Table */}
-        <EmployeeTable metrics={metrics} timePeriod={timePeriod} />
+        <TimePeriodSelector selectedPeriod={selectedPeriod} onPeriodChange={setSelectedPeriod} />
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <span className="ml-3 text-gray-600">Loading dashboard data...</span>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && connectionStatus === 'disconnected' && (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Unable to load dashboard data due to connection issues.</p>
+          </div>
+        )}
+
+        {/* Dashboard Content */}
+        {!loading && connectionStatus === 'connected' && (
+          <>
+            <SummaryCards metrics={metrics} />
+            <div className="mt-8">
+              <EmployeeTable metrics={metrics} timePeriod={selectedPeriod} />
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
