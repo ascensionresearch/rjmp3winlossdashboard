@@ -52,11 +52,11 @@ export async function getP3Meetings(timePeriod: TimePeriod = 'all_time'): Promis
       })
     }
 
-    // Now try the P3 query
+    // Now try the P3 query - simplified to just check call_and_meeting_type
     let query = supabase
       .from('Meetings')
       .select('*')
-      .or('meeting_outcome.eq.P3 - Proposal,and(call_and_meeting_type.eq.P3 - Proposal,meeting_outcome.eq.Completed)')
+      .eq('call_and_meeting_type', 'P3 - Proposal')
 
     // Apply time filtering
     if (timePeriod !== 'all_time') {
@@ -84,28 +84,18 @@ export async function getP3Meetings(timePeriod: TimePeriod = 'all_time'): Promis
 
     console.log(`Successfully fetched ${data?.length || 0} P3 meetings`)
     
-    // If no P3 meetings found, let's try a broader search
-    if (!data || data.length === 0) {
-      console.log('No P3 meetings found, trying broader search...')
-      
-      // Try searching for any meeting with "P3" in the name
-      const { data: broaderData, error: broaderError } = await supabase
-        .from('Meetings')
-        .select('*')
-        .or('meeting_outcome.ilike.%P3%,call_and_meeting_type.ilike.%P3%')
-        .limit(50)
-
-      if (broaderError) {
-        console.error('Broader search error:', broaderError)
-      } else {
-        console.log(`Broader search found ${broaderData?.length || 0} meetings with "P3"`)
-        if (broaderData && broaderData.length > 0) {
-          console.log('Sample broader results:')
-          broaderData.slice(0, 3).forEach((meeting, index) => {
-            console.log(`  Meeting ${index + 1}:`, meeting)
-          })
-        }
-      }
+    // Log P3 meetings found
+    if (data && data.length > 0) {
+      console.log(`Found ${data.length} P3 meetings`)
+      console.log('Sample P3 meetings:')
+      data.slice(0, 3).forEach((meeting, index) => {
+        console.log(`  P3 Meeting ${index + 1}:`, {
+          id: meeting.id,
+          call_and_meeting_type: meeting.call_and_meeting_type,
+          activity_assigned_to: meeting.activity_assigned_to,
+          create_date: meeting.create_date
+        })
+      })
     }
 
     return data || []
