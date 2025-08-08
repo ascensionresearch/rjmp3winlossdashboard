@@ -261,7 +261,7 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
       {tooltip && createPortal(
         <div
           className="z-50 w-[640px] max-w-[85vw] max-h-[60vh] overflow-y-auto bg-white border border-gray-300 rounded shadow-lg p-3 fixed"
-          style={{ left: tooltip.x, top: tooltip.y, transform: 'translate(-50%, 0)' }}
+          style={{ left: tooltip.x, top: tooltip.y, transform: 'translate(-50%, 0)', maxHeight: '60vh', overflowY: 'auto', maxWidth: '85vw' }}
           onMouseEnter={() => {
             if (hideTimeoutRef.current) {
               window.clearTimeout(hideTimeoutRef.current)
