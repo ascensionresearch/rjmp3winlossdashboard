@@ -1,56 +1,113 @@
 'use client'
 
-import { EmployeeMetrics } from '@/types/database'
-import { Users, Calendar, Medal, User } from 'lucide-react'
+import { EmployeeMetrics, TimePeriod } from '@/types/database'
+import { Calendar, User, Trophy, DollarSign, TrendingUp, TrendingDown, FileSignature, Banknote } from 'lucide-react'
 
 interface SummaryCardsProps {
   metrics: EmployeeMetrics[]
+  timePeriod: TimePeriod
 }
 
 function cleanEmployeeName(name: string): string {
   return name.replace(/\s*\([^)]*\)$/, '').trim()
 }
 
-export default function SummaryCards({ metrics }: SummaryCardsProps) {
+export default function SummaryCards({ metrics, timePeriod }: SummaryCardsProps) {
   const totalMeetings = metrics.reduce((sum, metric) => sum + metric.meeting_count, 0)
   const totalEmployees = metrics.length
   const averagePerEmployee = totalEmployees > 0 ? Math.round(totalMeetings / totalEmployees) : 0
   
-  const topPerformer = metrics.reduce((top, current) => 
+  const totalWonCount = metrics.reduce((sum, m) => sum + m.deals_won_count, 0)
+  const totalLostCount = metrics.reduce((sum, m) => sum + m.deals_lost_count, 0)
+  const totalInPlayCount = metrics.reduce((sum, m) => sum + m.deals_in_play_under_150_count, 0)
+  const totalOverdueCount = metrics.reduce((sum, m) => sum + m.deals_overdue_150_plus_count, 0)
+  // Match collapsed rows logic: percentage is count divided by P3 meeting count
+  const avgWinningPct = totalMeetings > 0 ? Math.round((totalWonCount / totalMeetings) * 100) : 0
+  const avgLosingPct = totalMeetings > 0 ? Math.round((totalLostCount / totalMeetings) * 100) : 0
+
+  // Backend already annualizes amounts for all_time/YTD, raw for month. Keep conditional for clarity.
+  const totalWonAmount = metrics.reduce((sum, m) => sum + m.deals_won_amount, 0)
+  const avgDealValueRaw = totalWonCount > 0 ? Math.round(totalWonAmount / totalWonCount) : 0
+  const avgDealValue = avgDealValueRaw
+  const isAnnualized = timePeriod === 'all_time' || timePeriod === 'year_to_date'
+
+  const topProposer = metrics.reduce((top, current) => 
     current.meeting_count > top.meeting_count ? current : top,
-    metrics[0] || { employee_name: 'N/A', meeting_count: 0 }
+    metrics[0] || { employee_name: 'N/A', meeting_count: 0, deals_won_count: 0, deals_won_amount: 0 }
+  )
+
+  const mostDealsWon = metrics.reduce((top, current) => 
+    current.deals_won_count > top.deals_won_count ? current : top,
+    metrics[0] || { employee_name: 'N/A', meeting_count: 0, deals_won_count: 0, deals_won_amount: 0 }
+  )
+
+  const topRevenueGenerator = metrics.reduce((top, current) => 
+    current.deals_won_amount > top.deals_won_amount ? current : top,
+    metrics[0] || { employee_name: 'N/A', meeting_count: 0, deals_won_count: 0, deals_won_amount: 0 }
   )
 
   const cards = [
     {
       title: 'Total P3 - Proposals',
       value: totalMeetings.toString(),
-      subtitle: 'all time',
+      subtitle: '',
       icon: Calendar,
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50'
     },
     {
-      title: 'Top Performer',
-      value: cleanEmployeeName(topPerformer.employee_name),
-      subtitle: `${topPerformer.meeting_count} meetings`,
-      icon: Medal,
+      title: 'Top Proposer',
+      value: cleanEmployeeName(topProposer.employee_name),
+      subtitle: `${topProposer.meeting_count} meetings`,
+      icon: FileSignature,
       iconColor: 'text-orange-600',
       bgColor: 'bg-orange-50'
     },
     {
-      title: 'Average per Employee',
+      title: 'Top Closer (by Volume)',
+      value: cleanEmployeeName(mostDealsWon.employee_name),
+      subtitle: `${mostDealsWon.deals_won_count} won`,
+      icon: Trophy,
+      iconColor: 'text-indigo-600',
+      bgColor: 'bg-indigo-50'
+    },
+    {
+      title: 'Top Closer (by Value)',
+      value: cleanEmployeeName(topRevenueGenerator.employee_name),
+      subtitle: `$${Math.round(topRevenueGenerator.deals_won_amount).toLocaleString()}`,
+      icon: DollarSign,
+      iconColor: 'text-green-600',
+      bgColor: 'bg-green-50'
+    },
+    {
+      title: 'Avg. # of Meetings',
       value: averagePerEmployee.toString(),
-      subtitle: 'meetings per person',
+      subtitle: '',
       icon: User,
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50'
     },
     {
-      title: 'Total Employees',
-      value: totalEmployees.toString(),
-      subtitle: 'team members with meetings',
-      icon: Users,
+      title: 'Avg. Winning Percentage',
+      value: `${avgWinningPct}%`,
+      subtitle: '',
+      icon: TrendingUp,
+      iconColor: 'text-emerald-600',
+      bgColor: 'bg-emerald-50'
+    },
+    {
+      title: 'Avg. Losing Percentage',
+      value: `${avgLosingPct}%`,
+      subtitle: '',
+      icon: TrendingDown,
+      iconColor: 'text-red-600',
+      bgColor: 'bg-red-50'
+    },
+    {
+      title: 'Avg. Deal Value',
+      value: `$${avgDealValue.toLocaleString()}`,
+      subtitle: isAnnualized ? '(Annualized)' : '(Not Annualized)',
+      icon: Banknote,
       iconColor: 'text-green-600',
       bgColor: 'bg-green-50'
     }
@@ -74,9 +131,11 @@ export default function SummaryCards({ metrics }: SummaryCardsProps) {
                 <p className="text-3xl font-bold text-gray-900 mb-1">
                   {card.value}
                 </p>
-                <p className="text-sm text-gray-500">
-                  {card.subtitle}
-                </p>
+                {card.subtitle && (
+                  <p className="text-sm text-gray-500">
+                    {card.subtitle}
+                  </p>
+                )}
               </div>
               <div className={`p-3 rounded-lg ${card.bgColor}`}>
                 <Icon size={24} className={card.iconColor} />

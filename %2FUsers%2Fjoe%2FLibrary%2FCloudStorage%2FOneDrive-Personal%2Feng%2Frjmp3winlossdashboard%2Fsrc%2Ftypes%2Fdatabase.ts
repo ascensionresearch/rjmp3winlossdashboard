@@ -38,12 +38,6 @@ export interface Deal {
   // Add other deal fields as needed
 }
 
-export interface DealTooltipItem {
-  name: string
-  stage?: string
-  classification?: 'won' | 'lost' | 'in_play' | 'overdue'
-}
-
 export interface EmployeeMetrics {
   employee_name: string
   meeting_count: number
@@ -57,15 +51,9 @@ export interface EmployeeMetrics {
   deals_overdue_150_plus_amount: number
   deals_in_play_under_150_names: string[]
   deals_overdue_150_plus_names: string[]
-  // Enhanced tooltip details for in-play/overdue
-  deals_in_play_under_150_details?: DealTooltipItem[]
-  deals_overdue_150_plus_details?: DealTooltipItem[]
   deals_won_names: string[]
   deals_lost_names: string[]
-  // Deals owned by this employee whose companies have no P3 meetings in selected period
-  deals_without_p3_count?: number
-  deals_without_p3_names?: string[]
-  deals_without_p3_details?: DealTooltipItem[]
 }
 
-export type TimePeriod = 'all_time' | 'year_to_date' | 'month_to_date' 
+export type TimePeriod = 'all_time' | 'year_to_date' | 'month_to_date'
+

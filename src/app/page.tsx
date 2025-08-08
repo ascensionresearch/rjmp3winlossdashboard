@@ -7,8 +7,16 @@ import TimePeriodSelector from '@/components/TimePeriodSelector'
 import SummaryCards from '@/components/SummaryCards'
 import EmployeeTable from '@/components/EmployeeTable'
 
+function getCurrentMonthValue(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
+
 export default function Dashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('all_time')
+  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthValue())
   const [metrics, setMetrics] = useState<EmployeeMetrics[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -21,7 +29,7 @@ export default function Dashboard() {
     
     try {
       console.log('Starting data fetch...')
-      const data = await getEmployeeMetrics(selectedPeriod)
+      const data = await getEmployeeMetrics(selectedPeriod, selectedMonth)
       setMetrics(data)
       setConnectionStatus('connected')
       console.log('Data fetch completed successfully')
@@ -37,7 +45,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData()
-  }, [selectedPeriod])
+  }, [selectedPeriod, selectedMonth])
 
   const handleRetry = () => {
     fetchData()
@@ -114,7 +122,7 @@ export default function Dashboard() {
         </div>
 
         {/* Time Period Selector */}
-        <TimePeriodSelector selectedPeriod={selectedPeriod} onPeriodChange={setSelectedPeriod} />
+        <TimePeriodSelector selectedPeriod={selectedPeriod} onPeriodChange={setSelectedPeriod} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
 
         {/* Loading State */}
         {loading && (
@@ -134,7 +142,7 @@ export default function Dashboard() {
         {/* Dashboard Content */}
         {!loading && connectionStatus === 'connected' && (
           <>
-            <SummaryCards metrics={metrics} />
+            <SummaryCards metrics={metrics} timePeriod={selectedPeriod} />
             <div className="mt-8">
               <EmployeeTable metrics={metrics} timePeriod={selectedPeriod} />
             </div>

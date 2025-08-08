@@ -5,16 +5,18 @@ import { TimePeriod } from '@/types/database'
 interface TimePeriodSelectorProps {
   selectedPeriod: TimePeriod
   onPeriodChange: (period: TimePeriod) => void
+  selectedMonth: string
+  onMonthChange: (month: string) => void
 }
 
-export default function TimePeriodSelector({ selectedPeriod, onPeriodChange }: TimePeriodSelectorProps) {
+export default function TimePeriodSelector({ selectedPeriod, onPeriodChange, selectedMonth, onMonthChange }: TimePeriodSelectorProps) {
   const periods = [
     { id: 'all_time' as TimePeriod, title: 'All Time' },
     { id: 'year_to_date' as TimePeriod, title: 'Year to Date' },
-    { id: 'month_to_date' as TimePeriod, title: 'Month to Date' },
+    { id: 'month_to_date' as TimePeriod, title: 'Specific Month' },
   ]
   return (
-    <div className="flex items-center gap-2 my-4">
+    <div className="flex items-center gap-3 my-4">
       {periods.map(period => (
         <button
           key={period.id}
@@ -28,6 +30,14 @@ export default function TimePeriodSelector({ selectedPeriod, onPeriodChange }: T
           {period.title}
         </button>
       ))}
+      {selectedPeriod === 'month_to_date' && (
+        <input
+          type="month"
+          value={selectedMonth}
+          onChange={(e) => onMonthChange(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-2 text-sm"
+        />
+      )}
     </div>
   )
 } 
