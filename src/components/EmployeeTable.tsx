@@ -14,7 +14,7 @@ function cleanEmployeeName(name: string): string {
 }
 
 // Replace DealPieChartLabeled with DealBarChartLabeled
-function DealBarChartLabeled({ won, lost, inPlay, overdue, amounts, meetingCount }: { 
+function DealBarChartLabeled({ won, lost, inPlay, overdue, amounts, meetingCount: _meetingCount }: { 
   won: number, 
   lost: number, 
   inPlay: number, 
@@ -75,11 +75,11 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
   console.log('EmployeeTable metrics:', metrics)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   // Tooltip state (supports either simple name list or detailed items with stage)
-  const [tooltip, setTooltip] = useState<
+  type TooltipState =
     | null
     | { x: number; y: number; label: string; names: string[] }
-    | { x: number; y: number; label: string; items: { name: string; stage?: string }[] }
-  >(null)
+    | { x: number; y: number; label: string; items: { name: string; stage?: string; classification?: 'won' | 'lost' | 'in_play' | 'overdue' }[] }
+  const [tooltip, setTooltip] = useState<TooltipState>(null)
   const tableRef = useRef<HTMLTableElement>(null)
   const hideTimeoutRef = useRef<number | null>(null)
 
@@ -96,7 +96,7 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
     }
   }
 
-  function handleShowTooltip(e: React.MouseEvent, names: string[], label: string) {
+  function handleShowTooltip(e: React.MouseEvent<HTMLElement>, names: string[], label: string) {
     const rect = (e.target as HTMLElement).getBoundingClientRect()
     if (hideTimeoutRef.current) {
       window.clearTimeout(hideTimeoutRef.current)
@@ -110,8 +110,8 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
     })
   }
   function handleShowTooltipDetails(
-    e: React.MouseEvent,
-    items: { name: string; stage?: string }[],
+    e: React.MouseEvent<HTMLElement>,
+    items: { name: string; stage?: string; classification?: 'won' | 'lost' | 'in_play' | 'overdue' }[],
     label: string
   ) {
     const rect = (e.target as HTMLElement).getBoundingClientRect()
@@ -190,9 +190,10 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-700 relative group">
                     <span
-                      onMouseEnter={e => (metric.deals_in_play_under_150_details?.length
-                        ? handleShowTooltipDetails(e, metric.deals_in_play_under_150_details, 'In Play Deals')
-                        : metric.deals_in_play_under_150_names?.length > 0 && handleShowTooltip(e, metric.deals_in_play_under_150_names, 'In Play Deals')) as any}
+                      onMouseEnter={e => {
+                        if (metric.deals_in_play_under_150_details?.length) handleShowTooltipDetails(e, metric.deals_in_play_under_150_details, 'In Play Deals')
+                        else if (metric.deals_in_play_under_150_names?.length) handleShowTooltip(e, metric.deals_in_play_under_150_names, 'In Play Deals')
+                      }}
                       onMouseLeave={handleHideTooltip}
                       style={{ cursor: (metric.deals_in_play_under_150_details?.length || metric.deals_in_play_under_150_names?.length) ? 'pointer' : undefined }}
                     >
@@ -202,9 +203,10 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-orange-700 relative group">
                     <span
-                      onMouseEnter={e => (metric.deals_overdue_150_plus_details?.length
-                        ? handleShowTooltipDetails(e, metric.deals_overdue_150_plus_details, 'Overdue Deals')
-                        : metric.deals_overdue_150_plus_names?.length > 0 && handleShowTooltip(e, metric.deals_overdue_150_plus_names, 'Overdue Deals')) as any}
+                      onMouseEnter={e => {
+                        if (metric.deals_overdue_150_plus_details?.length) handleShowTooltipDetails(e, metric.deals_overdue_150_plus_details, 'Overdue Deals')
+                        else if (metric.deals_overdue_150_plus_names?.length) handleShowTooltip(e, metric.deals_overdue_150_plus_names, 'Overdue Deals')
+                      }}
                       onMouseLeave={handleHideTooltip}
                       style={{ cursor: (metric.deals_overdue_150_plus_details?.length || metric.deals_overdue_150_plus_names?.length) ? 'pointer' : undefined }}
                     >
@@ -284,8 +286,8 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
                   .sort((a, b) => {
                     // Primary: classification order won -> lost -> in_play -> overdue
                     const order: Record<'won' | 'lost' | 'in_play' | 'overdue', number> = { won: 0, lost: 1, in_play: 2, overdue: 3 }
-                    const aClass = ((a as any).classification as 'won' | 'lost' | 'in_play' | 'overdue' | undefined) || 'in_play'
-                    const bClass = ((b as any).classification as 'won' | 'lost' | 'in_play' | 'overdue' | undefined) || 'in_play'
+                    const aClass: 'won' | 'lost' | 'in_play' | 'overdue' = (a.classification ?? 'in_play')
+                    const bClass: 'won' | 'lost' | 'in_play' | 'overdue' = (b.classification ?? 'in_play')
                     const ra = order[aClass]
                     const rb = order[bClass]
                     if (ra !== rb) return ra - rb
@@ -295,7 +297,7 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
                     return a.name.localeCompare(b.name)
                   })
                   .map((item, i) => {
-                    const classification = (item as any).classification as 'won' | 'lost' | 'in_play' | 'overdue' | undefined
+                    const classification = item.classification as 'won' | 'lost' | 'in_play' | 'overdue' | undefined
                     const isDealsWithoutP3 = tooltip.label === 'Deals without P3'
                     const color = classification === 'won' ? 'text-green-700' : classification === 'lost' ? 'text-red-700' : classification === 'in_play' ? 'text-blue-700' : classification === 'overdue' ? 'text-orange-700' : 'text-slate-800'
                     const isPriority = item.stage === 'A - Verbal Commitment' || item.stage === 'B - Strong Opportunity'

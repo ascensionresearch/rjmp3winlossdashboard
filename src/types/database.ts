@@ -22,6 +22,7 @@ export interface Company {
   companies?: string // This is the company UUID used for linking
   deals?: string // Deal UUID for this company
   Companies_fk_Companies?: string[] // Related company UUIDs
+  company_name?: string
   // Add other company fields as needed
 }
 
@@ -35,6 +36,7 @@ export interface Deal {
   deal_name?: string
   Companies_fk_Companies?: string[]
   Contacts_fk_Contacts?: string[]
+  deal_owner?: string
   // Add other deal fields as needed
 }
 

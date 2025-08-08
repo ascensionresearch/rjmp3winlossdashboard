@@ -29,7 +29,7 @@ export async function getP3Meetings(timePeriod: TimePeriod = 'all_time', selecte
   
   return retryWithBackoff(async () => {
     // First, let's get all meetings to see what we have
-    let allMeetingsQuery = supabase
+    const allMeetingsQuery = supabase
       .from('Meetings')
       .select('*')
       .limit(100)
@@ -275,17 +275,17 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
     for (let i = 0; i < companyIdsWithRelationsArray.length; i += batchSize) {
       const batch = companyIdsWithRelationsArray.slice(i, i + batchSize)
       // Overlap on array column
-      const { data: overlapData, error: overlapError } = await supabase
+       const { data: overlapData, error: overlapError } = await supabase
         .from('Deals')
         .select('whalesync_postgres_id, Companies_fk_Companies, Contacts_fk_Contacts, companies, deal_stage, amount, deal_type, create_date, deal_name')
         .overlaps('Companies_fk_Companies', batch)
-      if (!overlapError && overlapData) deals.push(...overlapData as any)
+       if (!overlapError && overlapData) deals.push(...(overlapData as Deal[]))
       // Scalar companies column (fallback)
-      const { data: scalarData, error: scalarError } = await supabase
+       const { data: scalarData, error: scalarError } = await supabase
         .from('Deals')
         .select('whalesync_postgres_id, Companies_fk_Companies, Contacts_fk_Contacts, companies, deal_stage, amount, deal_type, create_date, deal_name')
         .in('companies', batch)
-      if (!scalarError && scalarData) deals.push(...scalarData as any)
+       if (!scalarError && scalarData) deals.push(...(scalarData as Deal[]))
     }
   }
 
@@ -315,7 +315,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
       if (qualifyingDeals.length > 1) {
         multiCount++
         const company = companyMap.get(companyId)
-        const companyName = (company as any)?.company_name || companyId
+         const companyName = (company as Company | undefined)?.company_name || companyId
         console.log(`\nCompany: ${companyName} (${companyId}) - ${qualifyingDeals.length} monthly deals`)
         for (const d of qualifyingDeals) {
           console.log(`  - ${d.whalesync_postgres_id}: name='${d.deal_name || ''}', type='${d.deal_type || ''}', stage='${d.deal_stage || ''}', create_date='${d.create_date || ''}', amount='${d.amount ?? ''}'`)
@@ -378,12 +378,12 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
     employeeMeetings.get(assignee)!.push(meeting)
 
     let meetingResultedInDeal = false
-    let dealsFound: string[] = []
+    const dealsFound: string[] = []
     const metrics = employeeMetricsMap.get(assignee)!
 
     // Process deals linked directly to the meeting (Priority 1)
     if (meeting.Deals_fk_Deals && meeting.Deals_fk_Deals.length > 0) {
-      console.log(`Meeting ${meeting.id || (meeting as any).whalesync_postgres_id}: Using Priority 1 - Direct deals (${meeting.Deals_fk_Deals.length} deals)`)
+       console.log(`Meeting ${meeting.id || (meeting as unknown as { whalesync_postgres_id?: string }).whalesync_postgres_id}: Using Priority 1 - Direct deals (${meeting.Deals_fk_Deals.length} deals)`) 
       const meetingCompanies = new Set<string>(meeting.Companies_fk_Companies || [])
       let directIds = Array.from(new Set(meeting.Deals_fk_Deals))
       // If multiple direct deals, include only those associated to the meeting's companies
@@ -437,7 +437,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
 
     // Process company-linked deals (Priority 2)
     if (meeting.Companies_fk_Companies && meeting.Companies_fk_Companies.length > 0) {
-      console.log(`Meeting ${meeting.id || (meeting as any).whalesync_postgres_id}: Using Priority 2 - Company-linked deals (${meeting.Companies_fk_Companies.length} companies)`)
+         console.log(`Meeting ${meeting.id || (meeting as unknown as { whalesync_postgres_id?: string }).whalesync_postgres_id}: Using Priority 2 - Company-linked deals (${meeting.Companies_fk_Companies.length} companies)`) 
       for (const companyId of meeting.Companies_fk_Companies) {
         const allDealIds = new Set<string>()
         const pushDealsForCompany = (cid: string) => {
@@ -490,12 +490,12 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
 
     // If nothing was found at all
     if (!meetingResultedInDeal) {
-      console.log(`Meeting ${meeting.id || (meeting as any).whalesync_postgres_id}: No deals found (no qualifying direct/company/contact deals)`)
+      console.log(`Meeting ${meeting.id || (meeting as Partial<Meeting> & { whalesync_postgres_id?: string }).whalesync_postgres_id}: No deals found (no qualifying direct/company/contact deals)`) 
     }
 
     // DEBUG: Print meeting and deal UUIDs per classification; especially helpful for MTD overdue cases
     try {
-      const meetingDebugId = (meeting as any).id || (meeting as any).whalesync_postgres_id || 'Unknown'
+      const meetingDebugId = (meeting as Partial<Meeting> & { whalesync_postgres_id?: string }).id || (meeting as { whalesync_postgres_id?: string }).whalesync_postgres_id || 'Unknown'
       const uniqueDealIds = Array.from(new Set(dealsFound))
       console.log(`MEETING_CLASSIFY: employee='${assignee}' meeting_id='${meetingDebugId}' meeting_date='${meeting.create_date || ''}' deals=[${uniqueDealIds.join(', ')}]`)
       if ((timePeriod === 'month_to_date') && uniqueDealIds.length > 0) {
@@ -535,7 +535,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
           reason = 'Direct deals found but were globally de-duplicated elsewhere'
         }
         // Extra debug listing
-        console.log(`  Direct deals detail for meeting ${(meeting as any).id || (meeting as any).whalesync_postgres_id}:`)
+        console.log(`  Direct deals detail for meeting ${(meeting as Partial<Meeting> & { whalesync_postgres_id?: string }).id || (meeting as { whalesync_postgres_id?: string }).whalesync_postgres_id}:`)
         for (const id of meeting.Deals_fk_Deals) {
           const d = dealMap.get(id)
           const qualifies = d ? isValidDealType(d.deal_type) : false
@@ -556,7 +556,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
           const company = companyMap.get(companyId)
           if (company) {
             // Use the correct field name 'company_name' from the Companies table
-            const companyName = (company as any).company_name || companyId
+             const companyName = (company as Company | undefined)?.company_name || companyId
             companyNames.push(companyName)
           }
         }
@@ -565,7 +565,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
       // (Removed) company names derived through contacts per updated requirements
       
       meetingsWithoutDeals.get(assignee)!.push({
-        meetingId: (meeting as any).id || (meeting as any).whalesync_postgres_id || 'Unknown',
+        meetingId: (meeting as Partial<Meeting> & { whalesync_postgres_id?: string }).id || (meeting as { whalesync_postgres_id?: string }).whalesync_postgres_id || 'Unknown',
         meetingDate: meeting.create_date || 'Unknown',
         reason,
         contacts: meeting.Contacts_fk_Contacts || [],
@@ -629,8 +629,8 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
           }
         }
         // Contacts path
-        if ((m as any).Contacts_fk_Contacts && Array.isArray((m as any).Contacts_fk_Contacts)) {
-          for (const pid of (m as any).Contacts_fk_Contacts) contactIds.add(pid)
+        if ((m as Partial<Meeting>).Contacts_fk_Contacts && Array.isArray((m as Partial<Meeting>).Contacts_fk_Contacts)) {
+          for (const pid of (m as Partial<Meeting>).Contacts_fk_Contacts!) contactIds.add(pid)
         }
       }
 
@@ -648,9 +648,9 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
             .from('Deals')
             .select('whalesync_postgres_id, Companies_fk_Companies, companies, deal_type')
             .in('companies', batch)
-          const combined = [
-            ...((overlapData as any[]) || []),
-            ...((scalarData as any[]) || []),
+           const combined = [
+            ...((overlapData as Deal[]) || []),
+            ...((scalarData as Deal[]) || []),
           ] as Deal[]
           for (const d of combined) {
             if (d && isValidDealType(d.deal_type)) oldCandidateIds.add(d.whalesync_postgres_id)
@@ -668,7 +668,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
             .from('Deals')
             .select('whalesync_postgres_id, Contacts_fk_Contacts, deal_type')
             .overlaps('Contacts_fk_Contacts', batch)
-          for (const d of (data as any[] || []) as Deal[]) {
+          for (const d of ((data as Deal[]) || []) as Deal[]) {
             if (d && isValidDealType(d.deal_type)) oldCandidateIds.add(d.whalesync_postgres_id)
           }
         }
@@ -680,7 +680,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
         console.log(`\nREMOVED_DEALS_FOR_EMPLOYEE '${emp}': ${removed.length} deals`) 
         for (const id of removed) {
           const d = dealMap.get(id)
-          console.log(`  - ${id}: name='${d?.deal_name || ''}', companies='${(d as any)?.companies || ''}', type='${d?.deal_type || ''}', stage='${d?.deal_stage || ''}', create_date='${d?.create_date || ''}', amount='${d?.amount ?? ''}'`)
+          console.log(`  - ${id}: name='${d?.deal_name || ''}', companies='${(d as Deal | undefined)?.companies || ''}', type='${d?.deal_type || ''}', stage='${d?.deal_stage || ''}', create_date='${d?.create_date || ''}', amount='${d?.amount ?? ''}'`)
         }
       } else {
         console.log(`\nREMOVED_DEALS_FOR_EMPLOYEE '${emp}': none`)
@@ -731,7 +731,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
         const { data, error } = await query
         if (error) continue
         for (const d of (data || []) as Deal[]) {
-          const owner = (d as any).deal_owner as string | undefined
+          const owner = d.deal_owner as string | undefined
           if (!owner) continue
           const companyIds = new Set<string>()
           if (d.companies) companyIds.add(d.companies)

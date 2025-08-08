@@ -19,8 +19,8 @@ export default function SummaryCards({ metrics, timePeriod }: SummaryCardsProps)
   
   const totalWonCount = metrics.reduce((sum, m) => sum + m.deals_won_count, 0)
   const totalLostCount = metrics.reduce((sum, m) => sum + m.deals_lost_count, 0)
-  const totalInPlayCount = metrics.reduce((sum, m) => sum + m.deals_in_play_under_150_count, 0)
-  const totalOverdueCount = metrics.reduce((sum, m) => sum + m.deals_overdue_150_plus_count, 0)
+  // const totalInPlayCount = metrics.reduce((sum, m) => sum + m.deals_in_play_under_150_count, 0)
+  // const totalOverdueCount = metrics.reduce((sum, m) => sum + m.deals_overdue_150_plus_count, 0)
   // Match collapsed rows logic: percentage is count divided by P3 meeting count
   const avgWinningPct = totalMeetings > 0 ? Math.round((totalWonCount / totalMeetings) * 100) : 0
   const avgLosingPct = totalMeetings > 0 ? Math.round((totalLostCount / totalMeetings) * 100) : 0

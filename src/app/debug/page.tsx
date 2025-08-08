@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 export default function DebugPage() {
   const [status, setStatus] = useState<string>('Ready to test')
   const [error, setError] = useState<string>('')
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<unknown>(null)
 
   const testConnection = async () => {
     setStatus('Testing connection...')
@@ -53,7 +53,7 @@ export default function DebugPage() {
         'https://khsiujplqnvjmatvuest.supabase.co/rest/v1/'
       ]
 
-      const results = []
+      const results: Array<{ url: string; status: number | 'error'; ok: boolean; error?: string }> = []
       for (const url of testUrls) {
         try {
           const response = await fetch(url, { 
@@ -105,7 +105,7 @@ export default function DebugPage() {
 
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://khsiujplqnvjmatvuest.supabase.co'
-      const results = []
+      const results: Array<Record<string, unknown>> = []
 
       // Test 1: Basic health check endpoint
       try {
@@ -418,11 +418,11 @@ export default function DebugPage() {
           </div>
         </div>
 
-        {data && (
+        {Boolean(data) && (
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold mb-4">Query Results</h2>
             <pre className="bg-gray-100 p-4 rounded text-sm overflow-auto">
-              {JSON.stringify(data, null, 2)}
+              {String(JSON.stringify(data, null, 2))}
             </pre>
           </div>
         )}

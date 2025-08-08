@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getP3Meetings } from '@/lib/data'
 import { Meeting, Company, Deal, TimePeriod } from '@/types/database'
-import { startOfYear, startOfMonth, addMonths, parse } from 'date-fns'
+// Removed unused date-fns imports
 
 const normalize = (s?: string) => (s ?? '').toString().trim().toLowerCase()
 const validDealTypeSet = new Set(['monthly service', 'recurring special service'])
@@ -64,12 +64,12 @@ export async function GET(request: Request) {
           .from('Deals')
           .select('whalesync_postgres_id, Companies_fk_Companies, Contacts_fk_Contacts, companies, deal_stage, amount, deal_type, create_date, deal_name')
           .overlaps('Companies_fk_Companies', batch)
-        if (overlapData) deals.push(...(overlapData as any))
+        if (overlapData) deals.push(...(overlapData as Deal[]))
         const { data: scalarData } = await supabase
           .from('Deals')
           .select('whalesync_postgres_id, Companies_fk_Companies, Contacts_fk_Contacts, companies, deal_stage, amount, deal_type, create_date, deal_name')
           .in('companies', batch)
-        if (scalarData) deals.push(...(scalarData as any))
+        if (scalarData) deals.push(...(scalarData as Deal[]))
       }
     }
     const dealMap = new Map(deals.map(d => [d.whalesync_postgres_id, d]))
@@ -135,7 +135,7 @@ export async function GET(request: Request) {
 
     // 6) Reconstruct OLD candidate deals and compute removed per target employee(s)
     const targetEmployees = Array.from(employeeMeetings.keys()).filter(name => new RegExp(employeeQuery, 'i').test(name))
-    const results: Array<{ employee: string, count: number, deals: Array<any> }> = []
+    const results: Array<{ employee: string, count: number, deals: Array<{ id: string; name: string | null; companies: string | null; type: string | null; stage: string | null; create_date: string | null; amount: number | null }> }> = []
 
     for (const emp of targetEmployees) {
       const meetingsForEmp = employeeMeetings.get(emp) || []
@@ -160,8 +160,8 @@ export async function GET(request: Request) {
             }
           }
         }
-        if ((m as any).Contacts_fk_Contacts && Array.isArray((m as any).Contacts_fk_Contacts)) {
-          for (const pid of (m as any).Contacts_fk_Contacts) contactIds.add(pid)
+        if ((m as Meeting & { Contacts_fk_Contacts?: string[] }).Contacts_fk_Contacts && Array.isArray((m as Meeting & { Contacts_fk_Contacts?: string[] }).Contacts_fk_Contacts)) {
+          for (const pid of (m as Meeting & { Contacts_fk_Contacts?: string[] }).Contacts_fk_Contacts!) contactIds.add(pid)
         }
       }
 
@@ -179,8 +179,8 @@ export async function GET(request: Request) {
             .select('whalesync_postgres_id, Companies_fk_Companies, companies, deal_type, deal_name, deal_stage, create_date, amount')
             .in('companies', batch)
           const combined = [
-            ...((overlapData as any[]) || []),
-            ...((scalarData as any[]) || []),
+            ...((overlapData as Deal[]) || []),
+            ...((scalarData as Deal[]) || []),
           ] as Deal[]
           for (const d of combined) {
             if (d && isValidDealType(d.deal_type)) oldCandidateIds.add(d.whalesync_postgres_id)
@@ -197,19 +197,19 @@ export async function GET(request: Request) {
             .from('Deals')
             .select('whalesync_postgres_id, Contacts_fk_Contacts, deal_type, deal_name, deal_stage, create_date, amount')
             .overlaps('Contacts_fk_Contacts', batch)
-          for (const d of (data as any[] || []) as Deal[]) {
+          for (const d of ((data as Deal[]) || []) as Deal[]) {
             if (d && isValidDealType(d.deal_type)) oldCandidateIds.add(d.whalesync_postgres_id)
           }
         }
       }
 
       const removedIds = Array.from(oldCandidateIds).filter(id => !newIncluded.has(id))
-      const details = removedIds.map(id => {
-        const d = dealMap.get(id)
+        const details = removedIds.map(id => {
+          const d = dealMap.get(id)
         return {
           id,
           name: d?.deal_name || null,
-          companies: (d as any)?.companies || null,
+            companies: (d as Deal | undefined)?.companies || null,
           type: d?.deal_type || null,
           stage: d?.deal_stage || null,
           create_date: d?.create_date || null,
