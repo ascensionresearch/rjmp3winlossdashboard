@@ -140,7 +140,6 @@ export default function EmployeeTable({ metrics, showAllDeals = false }: Employe
         <h3 className="text-lg font-semibold text-gray-900">
           Employee Performance
         </h3>
-        <p className="text-xs text-gray-500 mt-1">*Note: Monthly Deals Only</p>
       </div>
       {/* Remove overflow-x-auto */}
       <table ref={tableRef} className="min-w-full table-fixed divide-y divide-gray-200 bg-white">
