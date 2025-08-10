@@ -37,7 +37,7 @@ async function retryWithBackoff<T>(
 }
 
 // Helper function to determine the correct assignee for split deals
-function getOverrideAssigneeForSplitDeal(dealName: string, defaultAssignee: string, existingEmployees: Map<string, any>): string {
+function getOverrideAssigneeForSplitDeal(dealName: string, defaultAssignee: string, existingEmployees: Map<string, EmployeeMetrics>): string {
   if (!dealName) return defaultAssignee
   
   // Check for split deal patterns and override assignee
@@ -298,7 +298,6 @@ export async function getAllDealsMetrics(timePeriod: TimePeriod = 'all_time', se
     console.log(`Successfully fetched ${allDeals?.length || 0} deals`)
 
     const deals = allDeals || []
-    const dealMap = new Map(deals.map(d => [d.whalesync_postgres_id, d]))
 
     // Group deals by employee (deal_owner)
     const employeeMetricsMap = new Map<string, EmployeeMetrics>()
@@ -556,7 +555,6 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
 
     let meetingResultedInDeal = false
     const dealsFound: string[] = []
-    const metrics = employeeMetricsMap.get(assignee)!
 
     // Process deals linked directly to the meeting (Priority 1)
     if (meeting.Deals_fk_Deals && meeting.Deals_fk_Deals.length > 0) {

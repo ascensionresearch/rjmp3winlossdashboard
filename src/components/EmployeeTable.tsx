@@ -15,13 +15,12 @@ function cleanEmployeeName(name: string): string {
 }
 
 // Replace DealPieChartLabeled with DealBarChartLabeled
-function DealBarChartLabeled({ won, lost, inPlay, overdue, amounts, meetingCount: _meetingCount }: { 
+function DealBarChartLabeled({ won, lost, inPlay, overdue, amounts }: { 
   won: number, 
   lost: number, 
   inPlay: number, 
   overdue: number, 
-  amounts: { won: number, lost: number, inPlay: number, overdue: number },
-  meetingCount: number 
+  amounts: { won: number, lost: number, inPlay: number, overdue: number }
 }) {
   const total = won + lost + inPlay + overdue
   const colors = ['#16a34a', '#dc2626', '#2563eb', '#ea580c']
@@ -242,7 +241,6 @@ export default function EmployeeTable({ metrics, showAllDeals = false }: Employe
                             inPlay: metric.deals_in_play_under_150_amount,
                             overdue: metric.deals_overdue_150_plus_amount
                           }}
-                          meetingCount={metric.meeting_count}
                         />
                         <div className="flex gap-8 mt-4">
                           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:'#16a34a'}}></span>Won</div>

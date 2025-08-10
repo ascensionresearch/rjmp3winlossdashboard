@@ -160,19 +160,19 @@ export default function Dashboard() {
                     <ul className="text-xs text-gray-700 space-y-1">
                       <li className="flex items-start">
                         <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
-                        <span>Only P3 proposal meetings where meeting outcome is "Completed" or "P3 - Proposal".</span>
+                        <span>Only P3 proposal meetings where meeting outcome is &quot;Completed&quot; or &quot;P3 - Proposal&quot;.</span>
                       </li>
                       <li className="flex items-start">
                         <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
-                        <span>Only deals where deal type is "Monthly" or "Recurring Special Service".</span>
+                        <span>Only deals where deal type is &quot;Monthly&quot; or &quot;Recurring Special Service&quot;.</span>
                       </li>
                       <li className="flex items-start">
                         <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
-                        <span>Deal stage for Won column is when deal stage is "Closed Won".</span>
+                        <span>Deal stage for Won column is when deal stage is &quot;Closed Won&quot;.</span>
                       </li>
                       <li className="flex items-start">
                         <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
-                        <span>Deal stage for Lost column is when deal stage is "Closed Lost".</span>
+                        <span>Deal stage for Lost column is when deal stage is &quot;Closed Lost&quot;.</span>
                       </li>
                       <li className="flex items-start">
                         <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
@@ -188,7 +188,7 @@ export default function Dashboard() {
                       </li>
                       <li className="flex items-start">
                         <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
-                        <span>Split deals marked "JQ 1/2" go to John Quinn and "MM 1/2" go to Mike Malan, regardless of P3 meeting owner.</span>
+                        <span>Split deals marked &quot;JQ 1/2&quot; go to John Quinn and &quot;MM 1/2&quot; go to Mike Malan, regardless of P3 meeting owner.</span>
                       </li>
                       <li className="flex items-start">
                         <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
