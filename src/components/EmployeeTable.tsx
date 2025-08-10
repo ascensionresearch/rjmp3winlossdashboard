@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 interface EmployeeTableProps {
   metrics: EmployeeMetrics[]
   timePeriod: TimePeriod
+  showAllDeals?: boolean
 }
 
 function cleanEmployeeName(name: string): string {
@@ -71,7 +72,7 @@ function DealBarChartLabeled({ won, lost, inPlay, overdue, amounts, meetingCount
   )
 }
 
-export default function EmployeeTable({ metrics }: EmployeeTableProps) {
+export default function EmployeeTable({ metrics, showAllDeals = false }: EmployeeTableProps) {
   console.log('EmployeeTable metrics:', metrics)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   // Tooltip state (supports either simple name list or detailed items with stage)
@@ -147,12 +148,12 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
         <thead className="bg-gray-50">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">P3 MEETINGS</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{showAllDeals ? 'DEALS' : 'P3 MEETINGS'}</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deals Won</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deals Lost</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">In Play {'<'}150 Days</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overdue 150+ Days</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deals w/o P3</th>
+            {!showAllDeals && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deals w/o P3</th>}
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -214,19 +215,21 @@ export default function EmployeeTable({ metrics }: EmployeeTableProps) {
                     </span>
                     <span className="ml-1 text-xs text-gray-500">({overduePct}%)</span>
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-400 relative group">
-                    <span
-                      onMouseEnter={e => metric.deals_without_p3_details?.length ? handleShowTooltipDetails(e, metric.deals_without_p3_details!, 'Deals without P3') : undefined}
-                      onMouseLeave={handleHideTooltip}
-                      style={{ cursor: metric.deals_without_p3_details?.length ? 'pointer' : undefined }}
-                    >
-                      {metric.deals_without_p3_count ?? 0}
-                    </span>
-                  </td>
+                  {!showAllDeals && (
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-400 relative group">
+                      <span
+                        onMouseEnter={e => metric.deals_without_p3_details?.length ? handleShowTooltipDetails(e, metric.deals_without_p3_details!, 'Deals without P3') : undefined}
+                        onMouseLeave={handleHideTooltip}
+                        style={{ cursor: metric.deals_without_p3_details?.length ? 'pointer' : undefined }}
+                      >
+                        {metric.deals_without_p3_count ?? 0}
+                      </span>
+                    </td>
+                  )}
                 </tr>
                 {expandedRows.has(idx) && (
                   <tr key={`${metric.employee_name}-expanded`}>
-                    <td colSpan={7} className="bg-gray-50 px-6 py-8">
+                    <td colSpan={showAllDeals ? 6 : 7} className="bg-gray-50 px-6 py-8">
                       <div className="flex flex-col items-center">
                         <DealBarChartLabeled
                           won={metric.deals_won_count}

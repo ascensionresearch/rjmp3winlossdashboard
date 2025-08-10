@@ -21,6 +21,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking')
+  const [showAllDeals, setShowAllDeals] = useState(false)
+  const [showAllEmployees, setShowAllEmployees] = useState(false)
+  const [showCriteria, setShowCriteria] = useState(false)
 
   const fetchData = async () => {
     setLoading(true)
@@ -29,7 +32,7 @@ export default function Dashboard() {
     
     try {
       console.log('Starting data fetch...')
-      const data = await getEmployeeMetrics(selectedPeriod, selectedMonth)
+      const data = await getEmployeeMetrics(selectedPeriod, selectedMonth, showAllDeals)
       setMetrics(data)
       setConnectionStatus('connected')
       console.log('Data fetch completed successfully')
@@ -46,11 +49,19 @@ export default function Dashboard() {
   useEffect(() => {
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPeriod, selectedMonth])
+  }, [selectedPeriod, selectedMonth, showAllDeals])
 
   const handleRetry = () => {
     fetchData()
   }
+
+  // Filter metrics based on employee selection
+  const filteredMetrics = showAllEmployees 
+    ? metrics 
+    : metrics.filter(metric => {
+        const name = metric.employee_name.toLowerCase()
+        return name.includes('rob') || name.includes('john') || name.includes('mike')
+      })
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -113,13 +124,137 @@ export default function Dashboard() {
         )}
 
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            P3 - Proposal and Deal Dashboard
-          </h1>
-          <p className="text-gray-600">
-            Track P3 - Proposal meetings and the resulting deals performance across your team.
-          </p>
+        <div className="mb-8 relative">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                P3 - Proposal and Deal Dashboard
+              </h1>
+              <p className="text-gray-600 mb-3">
+                Track P3 - Proposal meetings and the resulting deals performance across your team.
+              </p>
+              
+              {/* Criteria Information Toggle */}
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowCriteria(!showCriteria)}
+                  className={`flex items-center text-sm transition-colors duration-200 cursor-pointer ${
+                    showCriteria 
+                      ? 'text-blue-600 hover:text-blue-800' 
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  <svg
+                    className="w-4 h-4 mr-1"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <span>Dashboard Calculation Rules</span>
+                </button>
+                
+                {/* Expandable Criteria Content */}
+                {showCriteria && (
+                  <div className="mt-2 p-3 bg-gray-50 rounded-md border border-gray-200 max-w-2xl">
+                    <ul className="text-xs text-gray-700 space-y-1">
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>Only P3 proposal meetings where meeting outcome is "Completed" or "P3 - Proposal".</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>Only deals where deal type is "Monthly" or "Recurring Special Service".</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>Deal stage for Won column is when deal stage is "Closed Won".</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>Deal stage for Lost column is when deal stage is "Closed Lost".</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>Deal stage for In Play is open deals created &lt;150 days ago.</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>Deal stage for Overdue is open deals created ≥150 days ago.</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>Priority tags for In Play and Overdue deals are assigned only for deal stages A and B.</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>Split deals marked "JQ 1/2" go to John Quinn and "MM 1/2" go to Mike Malan, regardless of P3 meeting owner.</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>The top 3 employees are Rob, John, and Mike when toggle view is enabled.</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+                        <span>When toggle view is enabled for All Deals it is showing all monthly deals regardless of P3 meeting connections.</span>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Controls Container */}
+            <div className="flex flex-col items-end space-y-3">
+              {/* Data Scope Toggle */}
+              <div className="inline-flex rounded-lg bg-gray-100 p-1">
+                <button
+                  onClick={() => setShowAllDeals(false)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                    !showAllDeals
+                      ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  P3 Meetings
+                </button>
+                <button
+                  onClick={() => setShowAllDeals(true)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                    showAllDeals
+                      ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  All Deals
+                </button>
+              </div>
+
+              {/* Employee Filter Toggle */}
+              <div className="inline-flex rounded-lg bg-gray-100 p-1">
+                <button
+                  onClick={() => setShowAllEmployees(false)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                    !showAllEmployees
+                      ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Top 3 Employees
+                </button>
+                <button
+                  onClick={() => setShowAllEmployees(true)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                    showAllEmployees
+                      ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  All Employees
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Time Period Selector */}
@@ -143,9 +278,9 @@ export default function Dashboard() {
         {/* Dashboard Content */}
         {!loading && connectionStatus === 'connected' && (
           <>
-            <SummaryCards metrics={metrics} timePeriod={selectedPeriod} />
+            <SummaryCards metrics={filteredMetrics} timePeriod={selectedPeriod} showAllDeals={showAllDeals} />
             <div className="mt-8">
-              <EmployeeTable metrics={metrics} timePeriod={selectedPeriod} />
+              <EmployeeTable metrics={filteredMetrics} timePeriod={selectedPeriod} showAllDeals={showAllDeals} />
             </div>
           </>
         )}

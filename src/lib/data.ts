@@ -2,6 +2,18 @@ import { supabase } from './supabase'
 import { Meeting, Contact, Company, Deal, EmployeeMetrics, TimePeriod, DealTooltipItem } from '@/types/database'
 import { startOfYear, startOfMonth, parseISO, differenceInDays, addMonths, parse } from 'date-fns'
 
+// Helper function to sort employee metrics alphabetically with Service Manager at bottom
+function sortEmployeeMetrics(metrics: EmployeeMetrics[]): EmployeeMetrics[] {
+  return metrics.sort((a, b) => {
+    // Always put Service Manager at the bottom
+    if (a.employee_name.includes('Service Manager')) return 1
+    if (b.employee_name.includes('Service Manager')) return -1
+    
+    // Alphabetical sort for all others
+    return a.employee_name.localeCompare(b.employee_name)
+  })
+}
+
 // Retry mechanism for temporary connectivity issues
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -22,6 +34,33 @@ async function retryWithBackoff<T>(
     }
   }
   throw new Error('Max retries exceeded')
+}
+
+// Helper function to determine the correct assignee for split deals
+function getOverrideAssigneeForSplitDeal(dealName: string, defaultAssignee: string, existingEmployees: Map<string, any>): string {
+  if (!dealName) return defaultAssignee
+  
+  // Check for split deal patterns and override assignee
+  if (dealName.includes('JQ 1/2')) {
+    // Find existing John Quinn entry (could be "John Quinn", "John Quinn (JQ)", etc.)
+    for (const [name] of existingEmployees) {
+      if (name.includes('John Quinn')) {
+        return name
+      }
+    }
+    return 'John Quinn'  // fallback
+  }
+  if (dealName.includes('MM 1/2')) {
+    // Find existing Mike Malan entry (could be "Mike Malan", "Mike Malan (MM)", etc.)
+    for (const [name] of existingEmployees) {
+      if (name.includes('Mike Malan')) {
+        return name
+      }
+    }
+    return 'Mike Malan'  // fallback
+  }
+  
+  return defaultAssignee
 }
 
 export async function getP3Meetings(timePeriod: TimePeriod = 'all_time', selectedMonth?: string): Promise<Meeting[]> {
@@ -52,11 +91,14 @@ export async function getP3Meetings(timePeriod: TimePeriod = 'all_time', selecte
       })
     }
 
-    // Now try the P3 query - simplified to just check call_and_meeting_type
+    // P3 query with meeting outcome filter
+    // Include meetings where:
+    // call_and_meeting_type = 'P3 - Proposal' AND (meeting_outcome = 'Completed' OR meeting_outcome = 'P3 - Proposal')
     let query = supabase
       .from('Meetings')
       .select('*')
       .eq('call_and_meeting_type', 'P3 - Proposal')
+      .or('meeting_outcome.eq.Completed,meeting_outcome.eq."P3 - Proposal"')
 
     // Apply time filtering
     if (timePeriod !== 'all_time') {
@@ -104,11 +146,14 @@ export async function getP3Meetings(timePeriod: TimePeriod = 'all_time', selecte
         console.log(`  P3 Meeting ${index + 1}:`, {
           id: meeting.id,
           call_and_meeting_type: meeting.call_and_meeting_type,
+          meeting_outcome: meeting.meeting_outcome,
           activity_assigned_to: meeting.activity_assigned_to,
           create_date: meeting.create_date
         })
       })
     }
+    
+
 
     return data || []
   })
@@ -206,10 +251,140 @@ export async function getDealsFromCompanies(companies: Company[]): Promise<Deal[
   return data || []
 }
 
-export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', selectedMonth?: string): Promise<EmployeeMetrics[]> {
+export async function getAllDealsMetrics(timePeriod: TimePeriod = 'all_time', selectedMonth?: string): Promise<EmployeeMetrics[]> {
+  console.log('Fetching ALL DEALS metrics (bypassing P3 meeting filtering)')
+  
+  return retryWithBackoff(async () => {
+    // Apply time filtering
+    const now = new Date()
+    let startDate: Date | undefined
+    let endDateExclusive: Date | undefined
+
+    if (timePeriod !== 'all_time') {
+      if (timePeriod === 'year_to_date') {
+        startDate = startOfYear(now)
+      } else {
+        if (selectedMonth) {
+          const parsed = parse(selectedMonth, 'yyyy-MM', now)
+          startDate = startOfMonth(parsed)
+          endDateExclusive = addMonths(startDate, 1)
+        } else {
+          startDate = startOfMonth(now)
+        }
+      }
+    }
+
+    // Fetch all deals with qualifying types, time-filtered
+    let query = supabase
+      .from('Deals')
+      .select('whalesync_postgres_id, companies, deal_stage, amount, deal_type, create_date, deal_name, deal_owner, Companies_fk_Companies, Contacts_fk_Contacts')
+      .in('deal_type', ['Monthly Service', 'Recurring Special Service'])
+
+    if (startDate) {
+      query = query.gte('create_date', startDate.toISOString())
+    }
+    if (endDateExclusive) {
+      query = query.lt('create_date', endDateExclusive.toISOString())
+    }
+
+    console.log('Executing all deals query...')
+    const { data: allDeals, error } = await query
+
+    if (error) {
+      console.error('Error fetching all deals:', error)
+      throw error
+    }
+
+    console.log(`Successfully fetched ${allDeals?.length || 0} deals`)
+
+    const deals = allDeals || []
+    const dealMap = new Map(deals.map(d => [d.whalesync_postgres_id, d]))
+
+    // Group deals by employee (deal_owner)
+    const employeeMetricsMap = new Map<string, EmployeeMetrics>()
+
+    for (const deal of deals) {
+      const assignee = deal.deal_owner || 'Henry Kravis'
+      
+      if (!employeeMetricsMap.has(assignee)) {
+        employeeMetricsMap.set(assignee, {
+          employee_name: assignee,
+          meeting_count: 0, // Will be calculated as total deals for this employee
+          deals_won_count: 0,
+          deals_won_amount: 0,
+          deals_lost_count: 0,
+          deals_lost_amount: 0,
+          deals_in_play_under_150_count: 0,
+          deals_in_play_under_150_amount: 0,
+          deals_overdue_150_plus_count: 0,
+          deals_overdue_150_plus_amount: 0,
+          deals_in_play_under_150_names: [],
+          deals_overdue_150_plus_names: [],
+          deals_in_play_under_150_details: [],
+          deals_overdue_150_plus_details: [],
+          deals_won_names: [],
+          deals_lost_names: [],
+          deals_without_p3_count: 0,
+          deals_without_p3_names: [],
+          deals_without_p3_details: []
+        })
+      }
+
+      const metrics = employeeMetricsMap.get(assignee)!
+      
+      // Count all deals as "meetings" in this mode
+      metrics.meeting_count++
+
+      const isAnnualized = timePeriod === 'all_time' || timePeriod === 'year_to_date'
+      const dealValue = isAnnualized ? (deal.amount ?? 0) * 12 : (deal.amount ?? 0)
+
+      if (deal.deal_stage === 'Closed Won') {
+        metrics.deals_won_amount += dealValue
+        metrics.deals_won_count++
+        if (deal.deal_name) metrics.deals_won_names.push(deal.deal_name)
+      } else if (deal.deal_stage === 'Closed Lost') {
+        metrics.deals_lost_amount += dealValue
+        metrics.deals_lost_count++
+        if (deal.deal_name) metrics.deals_lost_names.push(deal.deal_name)
+      } else if (deal.create_date) {
+        const daysSinceCreation = differenceInDays(now, parseISO(deal.create_date))
+        if (daysSinceCreation < 150) {
+          metrics.deals_in_play_under_150_amount += dealValue
+          metrics.deals_in_play_under_150_count++
+          if (deal.deal_name) {
+            metrics.deals_in_play_under_150_names.push(deal.deal_name)
+            if (metrics.deals_in_play_under_150_details) {
+              metrics.deals_in_play_under_150_details.push({ name: deal.deal_name, stage: deal.deal_stage })
+            }
+          }
+        } else {
+          metrics.deals_overdue_150_plus_amount += dealValue
+          metrics.deals_overdue_150_plus_count++
+          if (deal.deal_name) {
+            metrics.deals_overdue_150_plus_names.push(deal.deal_name)
+            if (metrics.deals_overdue_150_plus_details) {
+              metrics.deals_overdue_150_plus_details.push({ name: deal.deal_name, stage: deal.deal_stage })
+            }
+          }
+        }
+      }
+    }
+
+    const unsortedMetrics = Array.from(employeeMetricsMap.values())
+    return sortEmployeeMetrics(unsortedMetrics)
+  })
+}
+
+export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', selectedMonth?: string, showAllDeals: boolean = false): Promise<EmployeeMetrics[]> {
+  if (showAllDeals) {
+    return getAllDealsMetrics(timePeriod, selectedMonth)
+  }
+
   // Get P3 meetings
   const meetings = await getP3Meetings(timePeriod, selectedMonth)
-  console.log(`Found ${meetings.length} P3 meetings`)
+  console.log(`Found ${meetings.length} P3 meetings for employee metrics processing`)
+  
+
 
   // Collect all unique company UUIDs from meetings (direct company links only)
   const directCompanyIds = new Set<string>()
@@ -352,7 +527,8 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
   }>>()
 
   for (const meeting of meetings) {
-    const assignee = meeting.activity_assigned_to || 'Unassigned'
+    const assignee = meeting.activity_assigned_to || 'Henry Kravis'
+    
     if (!employeeMetricsMap.has(assignee)) {
       employeeMetricsMap.set(assignee, {
         employee_name: assignee,
@@ -374,6 +550,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
       })
     }
     employeeMetricsMap.get(assignee)!.meeting_count++
+    
     if (!employeeMeetings.has(assignee)) employeeMeetings.set(assignee, [])
     employeeMeetings.get(assignee)!.push(meeting)
 
@@ -405,31 +582,66 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
         dealsFound.push(dealId)
         if (countedDealIds.has(dealId)) continue
         countedDealIds.add(dealId)
-        if (!employeeIncludedDeals.has(assignee)) employeeIncludedDeals.set(assignee, new Set())
-        employeeIncludedDeals.get(assignee)!.add(dealId)
+        
+        // Check for split deal override based on deal name
+        const actualAssignee = getOverrideAssigneeForSplitDeal(deal.deal_name || '', assignee, employeeMetricsMap)
+        
+        // Log split deal assignments for debugging
+        if (actualAssignee !== assignee) {
+          console.log(`SPLIT DEAL OVERRIDE: Deal "${deal.deal_name}" reassigned from "${assignee}" to "${actualAssignee}"`)
+        }
+        
+        // Ensure the actual assignee has an entry in the metrics map
+        if (!employeeMetricsMap.has(actualAssignee)) {
+          employeeMetricsMap.set(actualAssignee, {
+            employee_name: actualAssignee,
+            meeting_count: 0,
+            deals_won_count: 0,
+            deals_won_amount: 0,
+            deals_lost_count: 0,
+            deals_lost_amount: 0,
+            deals_in_play_under_150_count: 0,
+            deals_in_play_under_150_amount: 0,
+            deals_overdue_150_plus_count: 0,
+            deals_overdue_150_plus_amount: 0,
+            deals_in_play_under_150_names: [],
+            deals_overdue_150_plus_names: [],
+            deals_in_play_under_150_details: [],
+            deals_overdue_150_plus_details: [],
+            deals_won_names: [],
+            deals_lost_names: [],
+          })
+        }
+        
+        if (!employeeIncludedDeals.has(actualAssignee)) employeeIncludedDeals.set(actualAssignee, new Set())
+        employeeIncludedDeals.get(actualAssignee)!.add(dealId)
         const isAnnualized = timePeriod === 'all_time' || timePeriod === 'year_to_date'
         const dealValue = isAnnualized ? (deal.amount ?? 0) * 12 : (deal.amount ?? 0)
+        
+        // Get the metrics for the actual assignee (could be different from meeting owner for split deals)
+        const actualMetrics = employeeMetricsMap.get(actualAssignee)!
+        
         // Meeting-level category flags (ensures counts sum to meetings)
         if (deal.deal_stage === 'Closed Won') {
-          metrics.deals_won_amount += dealValue
-          metrics.deals_won_count++
-          if (deal.deal_name) metrics.deals_won_names.push(deal.deal_name)
+          actualMetrics.deals_won_amount += dealValue
+          actualMetrics.deals_won_count++
+          if (deal.deal_name) actualMetrics.deals_won_names.push(deal.deal_name)
         } else if (deal.deal_stage === 'Closed Lost') {
-          metrics.deals_lost_amount += dealValue
-          metrics.deals_lost_count++
-          if (deal.deal_name) metrics.deals_lost_names.push(deal.deal_name)
+          actualMetrics.deals_lost_amount += dealValue
+          actualMetrics.deals_lost_count++
+          if (deal.deal_name) actualMetrics.deals_lost_names.push(deal.deal_name)
         } else if (deal.create_date) {
           const daysSinceCreation = differenceInDays(now, parseISO(deal.create_date))
           if (daysSinceCreation < 150) {
-            metrics.deals_in_play_under_150_amount += dealValue
-            metrics.deals_in_play_under_150_count++
-            if (deal.deal_name) metrics.deals_in_play_under_150_names.push(deal.deal_name)
-            if (deal.deal_name) (metrics.deals_in_play_under_150_details as DealTooltipItem[]).push({ name: deal.deal_name, stage: deal.deal_stage })
+            actualMetrics.deals_in_play_under_150_amount += dealValue
+            actualMetrics.deals_in_play_under_150_count++
+            if (deal.deal_name) actualMetrics.deals_in_play_under_150_names.push(deal.deal_name)
+            if (deal.deal_name) (actualMetrics.deals_in_play_under_150_details as DealTooltipItem[]).push({ name: deal.deal_name, stage: deal.deal_stage })
           } else {
-            metrics.deals_overdue_150_plus_amount += dealValue
-            metrics.deals_overdue_150_plus_count++
-            if (deal.deal_name) metrics.deals_overdue_150_plus_names.push(deal.deal_name)
-            if (deal.deal_name) (metrics.deals_overdue_150_plus_details as DealTooltipItem[]).push({ name: deal.deal_name, stage: deal.deal_stage })
+            actualMetrics.deals_overdue_150_plus_amount += dealValue
+            actualMetrics.deals_overdue_150_plus_count++
+            if (deal.deal_name) actualMetrics.deals_overdue_150_plus_names.push(deal.deal_name)
+            if (deal.deal_name) (actualMetrics.deals_overdue_150_plus_details as DealTooltipItem[]).push({ name: deal.deal_name, stage: deal.deal_stage })
           }
         }
       }
@@ -455,31 +667,66 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
           dealsFound.push(dealId)
           if (countedDealIds.has(dealId)) continue
           countedDealIds.add(dealId)
-          if (!employeeIncludedDeals.has(assignee)) employeeIncludedDeals.set(assignee, new Set())
-          employeeIncludedDeals.get(assignee)!.add(dealId)
+          
+          // Check for split deal override based on deal name
+          const actualAssignee = getOverrideAssigneeForSplitDeal(deal.deal_name || '', assignee, employeeMetricsMap)
+          
+          // Log split deal assignments for debugging
+          if (actualAssignee !== assignee) {
+            console.log(`SPLIT DEAL OVERRIDE: Deal "${deal.deal_name}" reassigned from "${assignee}" to "${actualAssignee}"`)
+          }
+          
+          // Ensure the actual assignee has an entry in the metrics map
+          if (!employeeMetricsMap.has(actualAssignee)) {
+            employeeMetricsMap.set(actualAssignee, {
+              employee_name: actualAssignee,
+              meeting_count: 0,
+              deals_won_count: 0,
+              deals_won_amount: 0,
+              deals_lost_count: 0,
+              deals_lost_amount: 0,
+              deals_in_play_under_150_count: 0,
+              deals_in_play_under_150_amount: 0,
+              deals_overdue_150_plus_count: 0,
+              deals_overdue_150_plus_amount: 0,
+              deals_in_play_under_150_names: [],
+              deals_overdue_150_plus_names: [],
+              deals_in_play_under_150_details: [],
+              deals_overdue_150_plus_details: [],
+              deals_won_names: [],
+              deals_lost_names: [],
+            })
+          }
+          
+          if (!employeeIncludedDeals.has(actualAssignee)) employeeIncludedDeals.set(actualAssignee, new Set())
+          employeeIncludedDeals.get(actualAssignee)!.add(dealId)
           const isAnnualized = timePeriod === 'all_time' || timePeriod === 'year_to_date'
           const dealValue = isAnnualized ? (deal.amount ?? 0) * 12 : (deal.amount ?? 0)
+          
+          // Get the metrics for the actual assignee (could be different from meeting owner for split deals)
+          const actualMetrics = employeeMetricsMap.get(actualAssignee)!
+          
           // Meeting-level category flags (ensures counts sum to meetings)
           if (deal.deal_stage === 'Closed Won') {
-            metrics.deals_won_amount += dealValue
-            metrics.deals_won_count++
-            if (deal.deal_name) metrics.deals_won_names.push(deal.deal_name)
+            actualMetrics.deals_won_amount += dealValue
+            actualMetrics.deals_won_count++
+            if (deal.deal_name) actualMetrics.deals_won_names.push(deal.deal_name)
           } else if (deal.deal_stage === 'Closed Lost') {
-            metrics.deals_lost_amount += dealValue
-            metrics.deals_lost_count++
-            if (deal.deal_name) metrics.deals_lost_names.push(deal.deal_name)
+            actualMetrics.deals_lost_amount += dealValue
+            actualMetrics.deals_lost_count++
+            if (deal.deal_name) actualMetrics.deals_lost_names.push(deal.deal_name)
           } else if (deal.create_date) {
             const daysSinceCreation = differenceInDays(now, parseISO(deal.create_date))
             if (daysSinceCreation < 150) {
-              metrics.deals_in_play_under_150_amount += dealValue
-              metrics.deals_in_play_under_150_count++
-              if (deal.deal_name) metrics.deals_in_play_under_150_names.push(deal.deal_name)
-              if (deal.deal_name) (metrics.deals_in_play_under_150_details as DealTooltipItem[]).push({ name: deal.deal_name, stage: deal.deal_stage })
+              actualMetrics.deals_in_play_under_150_amount += dealValue
+              actualMetrics.deals_in_play_under_150_count++
+              if (deal.deal_name) actualMetrics.deals_in_play_under_150_names.push(deal.deal_name)
+              if (deal.deal_name) (actualMetrics.deals_in_play_under_150_details as DealTooltipItem[]).push({ name: deal.deal_name, stage: deal.deal_stage })
             } else {
-              metrics.deals_overdue_150_plus_amount += dealValue
-              metrics.deals_overdue_150_plus_count++
-              if (deal.deal_name) metrics.deals_overdue_150_plus_names.push(deal.deal_name)
-              if (deal.deal_name) (metrics.deals_overdue_150_plus_details as DealTooltipItem[]).push({ name: deal.deal_name, stage: deal.deal_stage })
+              actualMetrics.deals_overdue_150_plus_amount += dealValue
+              actualMetrics.deals_overdue_150_plus_count++
+              if (deal.deal_name) actualMetrics.deals_overdue_150_plus_names.push(deal.deal_name)
+              if (deal.deal_name) (actualMetrics.deals_overdue_150_plus_details as DealTooltipItem[]).push({ name: deal.deal_name, stage: deal.deal_stage })
             }
           }
         }
@@ -771,5 +1018,7 @@ export async function getEmployeeMetrics(timePeriod: TimePeriod = 'all_time', se
     console.log('Compute deals without P3 failed:', e)
   }
 
-  return Array.from(employeeMetricsMap.values())
+  const finalMetrics = Array.from(employeeMetricsMap.values())
+  
+  return sortEmployeeMetrics(finalMetrics)
 } 

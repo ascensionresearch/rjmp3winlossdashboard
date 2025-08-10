@@ -6,13 +6,14 @@ import { Calendar, User, Trophy, DollarSign, TrendingUp, TrendingDown, FileSigna
 interface SummaryCardsProps {
   metrics: EmployeeMetrics[]
   timePeriod: TimePeriod
+  showAllDeals?: boolean
 }
 
 function cleanEmployeeName(name: string): string {
   return name.replace(/\s*\([^)]*\)$/, '').trim()
 }
 
-export default function SummaryCards({ metrics, timePeriod }: SummaryCardsProps) {
+export default function SummaryCards({ metrics, timePeriod, showAllDeals = false }: SummaryCardsProps) {
   const totalMeetings = metrics.reduce((sum, metric) => sum + metric.meeting_count, 0)
   const totalEmployees = metrics.length
   const averagePerEmployee = totalEmployees > 0 ? Math.round(totalMeetings / totalEmployees) : 0
@@ -47,8 +48,9 @@ export default function SummaryCards({ metrics, timePeriod }: SummaryCardsProps)
   )
 
   const cards = [
+    // Top Row: Total P3, Avg # of Meetings, Avg Winning %, Avg Losing %
     {
-      title: 'Total P3 - Proposals',
+      title: showAllDeals ? 'Total Deals' : 'Total P3 - Proposals',
       value: totalMeetings.toString(),
       subtitle: '',
       icon: Calendar,
@@ -56,31 +58,7 @@ export default function SummaryCards({ metrics, timePeriod }: SummaryCardsProps)
       bgColor: 'bg-blue-50'
     },
     {
-      title: 'Top Proposer',
-      value: cleanEmployeeName(topProposer.employee_name),
-      subtitle: `${topProposer.meeting_count} meetings`,
-      icon: FileSignature,
-      iconColor: 'text-orange-600',
-      bgColor: 'bg-orange-50'
-    },
-    {
-      title: 'Top Closer (by Volume)',
-      value: cleanEmployeeName(mostDealsWon.employee_name),
-      subtitle: `${mostDealsWon.deals_won_count} won`,
-      icon: Trophy,
-      iconColor: 'text-indigo-600',
-      bgColor: 'bg-indigo-50'
-    },
-    {
-      title: 'Top Closer (by Value)',
-      value: cleanEmployeeName(topRevenueGenerator.employee_name),
-      subtitle: `$${Math.round(topRevenueGenerator.deals_won_amount).toLocaleString()}`,
-      icon: DollarSign,
-      iconColor: 'text-green-600',
-      bgColor: 'bg-green-50'
-    },
-    {
-      title: 'Avg. # of Meetings',
+      title: showAllDeals ? 'Avg. # of Deals' : 'Avg. # of Meetings',
       value: averagePerEmployee.toString(),
       subtitle: '',
       icon: User,
@@ -102,6 +80,31 @@ export default function SummaryCards({ metrics, timePeriod }: SummaryCardsProps)
       icon: TrendingDown,
       iconColor: 'text-red-600',
       bgColor: 'bg-red-50'
+    },
+    // Bottom Row: Top performers and deal value
+    {
+      title: showAllDeals ? 'Top Deal Owner' : 'Top Proposer',
+      value: cleanEmployeeName(topProposer.employee_name),
+      subtitle: showAllDeals ? `${topProposer.meeting_count} deals` : `${topProposer.meeting_count} meetings`,
+      icon: FileSignature,
+      iconColor: 'text-orange-600',
+      bgColor: 'bg-orange-50'
+    },
+    {
+      title: 'Top Closer (by Volume)',
+      value: cleanEmployeeName(mostDealsWon.employee_name),
+      subtitle: `${mostDealsWon.deals_won_count} won`,
+      icon: Trophy,
+      iconColor: 'text-indigo-600',
+      bgColor: 'bg-indigo-50'
+    },
+    {
+      title: 'Top Closer (by Value)',
+      value: cleanEmployeeName(topRevenueGenerator.employee_name),
+      subtitle: `$${Math.round(topRevenueGenerator.deals_won_amount).toLocaleString()}${isAnnualized ? ' (Annualized)' : ' (Not Annualized)'}`,
+      icon: DollarSign,
+      iconColor: 'text-green-600',
+      bgColor: 'bg-green-50'
     },
     {
       title: 'Avg. Deal Value',
