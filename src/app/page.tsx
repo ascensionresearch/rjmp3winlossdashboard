@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { getEmployeeMetrics } from '@/lib/data'
 import { EmployeeMetrics, TimePeriod } from '@/types/database'
 import TimePeriodSelector from '@/components/TimePeriodSelector'
@@ -14,7 +15,67 @@ function getCurrentMonthValue(): string {
   return `${y}-${m}`
 }
 
+// Data sanitization functions for client view
+function sanitizeEmployeeMetrics(metrics: EmployeeMetrics[], isClientView: boolean): EmployeeMetrics[] {
+  if (!isClientView) return metrics
+  
+  // Create a mapping of original employee names to generic names
+  const employeeMapping = new Map<string, string>()
+  const sortedEmployeeNames = [...new Set(metrics.map(m => m.employee_name))].sort()
+  
+  sortedEmployeeNames.forEach((name, index) => {
+    if (name.includes('Service Manager')) {
+      employeeMapping.set(name, 'Service Manager')
+    } else {
+      employeeMapping.set(name, `Employee ${String.fromCharCode(65 + index)}`) // A, B, C, etc.
+    }
+  })
+  
+  // Create deal name mapping
+  let dealCounter = 1
+  const dealMapping = new Map<string, string>()
+  
+  const sanitizeDealNames = (dealNames: string[]): string[] => {
+    return dealNames.map(dealName => {
+      if (!dealMapping.has(dealName)) {
+        dealMapping.set(dealName, `Deal ${dealCounter}`)
+        dealCounter++
+      }
+      return dealMapping.get(dealName)!
+    })
+  }
+  
+  const sanitizeTooltipDetails = (details?: { name: string; stage?: string; classification?: 'won' | 'lost' | 'in_play' | 'overdue' }[]) => {
+    if (!details) return details
+    return details.map(detail => ({
+      ...detail,
+      name: dealMapping.get(detail.name) || (() => {
+        const sanitized = `Deal ${dealCounter}`
+        dealMapping.set(detail.name, sanitized)
+        dealCounter++
+        return sanitized
+      })()
+    }))
+  }
+  
+  return metrics.map(metric => ({
+    ...metric,
+    employee_name: employeeMapping.get(metric.employee_name) || metric.employee_name,
+    deals_won_names: sanitizeDealNames(metric.deals_won_names),
+    deals_lost_names: sanitizeDealNames(metric.deals_lost_names),
+    deals_in_play_under_150_names: sanitizeDealNames(metric.deals_in_play_under_150_names),
+    deals_overdue_150_plus_names: sanitizeDealNames(metric.deals_overdue_150_plus_names),
+    deals_without_p3_names: metric.deals_without_p3_names ? sanitizeDealNames(metric.deals_without_p3_names) : undefined,
+    deals_in_play_under_150_details: sanitizeTooltipDetails(metric.deals_in_play_under_150_details),
+    deals_overdue_150_plus_details: sanitizeTooltipDetails(metric.deals_overdue_150_plus_details),
+    deals_without_p3_details: sanitizeTooltipDetails(metric.deals_without_p3_details),
+  }))
+}
+
 export default function Dashboard() {
+  const searchParams = useSearchParams()
+  const isClientView = searchParams.get('view') === 'client'
+  
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('all_time')
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthValue())
   const [metrics, setMetrics] = useState<EmployeeMetrics[]>([])
@@ -33,7 +94,8 @@ export default function Dashboard() {
     try {
       console.log('Starting data fetch...')
       const data = await getEmployeeMetrics(selectedPeriod, selectedMonth, showAllDeals)
-      setMetrics(data)
+      const sanitizedData = sanitizeEmployeeMetrics(data, isClientView)
+      setMetrics(sanitizedData)
       setConnectionStatus('connected')
       console.log('Data fetch completed successfully')
     } catch (err) {
@@ -49,7 +111,7 @@ export default function Dashboard() {
   useEffect(() => {
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPeriod, selectedMonth, showAllDeals])
+  }, [selectedPeriod, selectedMonth, showAllDeals, isClientView])
 
   const handleRetry = () => {
     fetchData()
@@ -127,15 +189,26 @@ export default function Dashboard() {
         <div className="mb-8 relative">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                P3 - Proposal and Deal Dashboard
-              </h1>
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-3xl font-bold text-gray-900">
+                  P3 - Proposal and Deal Dashboard
+                </h1>
+                {isClientView && (
+                  <span className="bg-blue-100 text-blue-800 text-sm font-medium px-3 py-1 rounded-full">
+                    Client View
+                  </span>
+                )}
+              </div>
               <p className="text-gray-600 mb-3">
-                Track P3 - Proposal meetings and the resulting deals performance across your team.
+                {isClientView 
+                  ? "Demo dashboard showing sanitized data for client presentation."
+                  : "Track P3 - Proposal meetings and the resulting deals performance across your team."
+                }
               </p>
               
-              {/* Criteria Information Toggle */}
-              <div className="mt-3">
+              {/* Criteria Information Toggle - Hidden in client view */}
+              {!isClientView && (
+                <div className="mt-3">
                 <button
                   onClick={() => setShowCriteria(!showCriteria)}
                   className={`flex items-center text-sm transition-colors duration-200 cursor-pointer ${
@@ -201,7 +274,8 @@ export default function Dashboard() {
                     </ul>
                   </div>
                 )}
-              </div>
+                </div>
+              )}
             </div>
             
             {/* Controls Container */}
