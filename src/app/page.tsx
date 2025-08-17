@@ -15,7 +15,7 @@ function getCurrentMonthValue(): string {
   return `${y}-${m}`
 }
 
-// Data sanitization functions for client view
+// Data sanitization functions for client view - only mask display names, keep all data
 function sanitizeEmployeeMetrics(metrics: EmployeeMetrics[], isClientView: boolean): EmployeeMetrics[] {
   if (!isClientView) return metrics
   
@@ -27,7 +27,7 @@ function sanitizeEmployeeMetrics(metrics: EmployeeMetrics[], isClientView: boole
     if (name.includes('Service Manager')) {
       employeeMapping.set(name, 'Service Manager')
     } else {
-      employeeMapping.set(name, `Employee ${String.fromCharCode(65 + index)}`) // A, B, C, etc.
+      employeeMapping.set(name, `Employee ${index + 1}`) // Employee 1, Employee 2, etc.
     }
   })
   
@@ -94,8 +94,7 @@ function DashboardContent() {
     try {
       console.log('Starting data fetch...')
       const data = await getEmployeeMetrics(selectedPeriod, selectedMonth, showAllDeals)
-      const sanitizedData = sanitizeEmployeeMetrics(data, isClientView)
-      setMetrics(sanitizedData)
+      setMetrics(data)
       setConnectionStatus('connected')
       console.log('Data fetch completed successfully')
     } catch (err) {
@@ -111,7 +110,7 @@ function DashboardContent() {
   useEffect(() => {
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPeriod, selectedMonth, showAllDeals, isClientView])
+  }, [selectedPeriod, selectedMonth, showAllDeals])
 
   const handleRetry = () => {
     fetchData()
@@ -124,6 +123,9 @@ function DashboardContent() {
         const name = metric.employee_name.toLowerCase()
         return name.includes('rob') || name.includes('john') || name.includes('mike')
       })
+
+  // Apply client view sanitization only for display
+  const displayMetrics = sanitizeEmployeeMetrics(filteredMetrics, isClientView)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -352,9 +354,9 @@ function DashboardContent() {
         {/* Dashboard Content */}
         {!loading && connectionStatus === 'connected' && (
           <>
-            <SummaryCards metrics={filteredMetrics} timePeriod={selectedPeriod} showAllDeals={showAllDeals} />
+            <SummaryCards metrics={displayMetrics} timePeriod={selectedPeriod} showAllDeals={showAllDeals} />
             <div className="mt-8">
-              <EmployeeTable metrics={filteredMetrics} timePeriod={selectedPeriod} showAllDeals={showAllDeals} />
+              <EmployeeTable metrics={displayMetrics} timePeriod={selectedPeriod} showAllDeals={showAllDeals} />
             </div>
           </>
         )}
