@@ -41,6 +41,18 @@ export default function SummaryCards({ metrics, timePeriod, showAllDeals = false
       metric.deals_overdue_150_plus_amount
   }, 0)
 
+  // Calculate total deals count across all categories
+  const totalDealsCount = metrics.reduce((sum, metric) => {
+    return sum + 
+      metric.deals_won_count + 
+      metric.deals_lost_count + 
+      metric.deals_in_play_under_150_count + 
+      metric.deals_overdue_150_plus_count
+  }, 0)
+
+  // Calculate average deal value proposed (all deals)
+  const avgDealValueProposed = totalDealsCount > 0 ? Math.round(totalDollarsProposed / totalDealsCount) : 0
+
   const topProposer = metrics.reduce((top, current) => 
     current.meeting_count > top.meeting_count ? current : top,
     metrics[0] || { employee_name: 'N/A', meeting_count: 0, deals_won_count: 0, deals_won_amount: 0 }
@@ -90,7 +102,7 @@ export default function SummaryCards({ metrics, timePeriod, showAllDeals = false
       iconColor: 'text-red-600',
       bgColor: 'bg-red-50'
     },
-    // Bottom Row: Top performers and deal value
+    // Bottom Row: Top performers and deal values
     {
       title: showAllDeals ? 'Top Deal Owner' : 'Top Proposer',
       value: cleanEmployeeName(topProposer.employee_name),
@@ -116,17 +128,25 @@ export default function SummaryCards({ metrics, timePeriod, showAllDeals = false
       bgColor: 'bg-green-50'
     },
     {
-      title: 'Avg. Deal Value',
+      title: 'Avg. Deal Value Won',
       value: `$${avgDealValue.toLocaleString()}`,
       subtitle: isAnnualized ? '(Annualized)' : '(Not Annualized)',
       icon: Banknote,
       iconColor: 'text-green-600',
       bgColor: 'bg-green-50'
+    },
+    {
+      title: 'Avg. Deal Value Proposed',
+      value: `$${avgDealValueProposed.toLocaleString()}`,
+      subtitle: isAnnualized ? '(Annualized)' : '(Not Annualized)',
+      icon: Banknote,
+      iconColor: 'text-blue-600',
+      bgColor: 'bg-blue-50'
     }
   ]
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
       {cards.map((card, index) => {
         const Icon = card.icon
         
