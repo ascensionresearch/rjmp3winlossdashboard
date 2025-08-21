@@ -169,7 +169,7 @@ export default function EmployeeTable({ metrics, showAllDeals = false }: Employe
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                     {metric.meeting_count}
                     <div className="text-xs text-gray-500 mt-1">
-                      - ${Math.round(
+                      ${Math.round(
                         metric.deals_won_amount + 
                         metric.deals_lost_amount + 
                         metric.deals_in_play_under_150_amount + 

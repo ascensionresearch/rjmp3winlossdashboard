@@ -61,7 +61,7 @@ export default function SummaryCards({ metrics, timePeriod, showAllDeals = false
     {
       title: showAllDeals ? 'Total Deals' : 'Total P3 - Proposals',
       value: totalMeetings.toString(),
-      subtitle: `- $${Math.round(totalDollarsProposed).toLocaleString()} Total Dollars Proposed`,
+      subtitle: `$${Math.round(totalDollarsProposed).toLocaleString()} Total Dollars Proposed`,
       icon: Calendar,
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50'
