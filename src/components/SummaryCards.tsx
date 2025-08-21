@@ -32,6 +32,15 @@ export default function SummaryCards({ metrics, timePeriod, showAllDeals = false
   const avgDealValue = avgDealValueRaw
   const isAnnualized = timePeriod === 'all_time' || timePeriod === 'year_to_date'
 
+  // Calculate total dollars proposed across all categories and employees
+  const totalDollarsProposed = metrics.reduce((sum, metric) => {
+    return sum + 
+      metric.deals_won_amount + 
+      metric.deals_lost_amount + 
+      metric.deals_in_play_under_150_amount + 
+      metric.deals_overdue_150_plus_amount
+  }, 0)
+
   const topProposer = metrics.reduce((top, current) => 
     current.meeting_count > top.meeting_count ? current : top,
     metrics[0] || { employee_name: 'N/A', meeting_count: 0, deals_won_count: 0, deals_won_amount: 0 }
@@ -52,7 +61,7 @@ export default function SummaryCards({ metrics, timePeriod, showAllDeals = false
     {
       title: showAllDeals ? 'Total Deals' : 'Total P3 - Proposals',
       value: totalMeetings.toString(),
-      subtitle: '',
+      subtitle: `- $${Math.round(totalDollarsProposed).toLocaleString()} Total Dollars Proposed`,
       icon: Calendar,
       iconColor: 'text-blue-600',
       bgColor: 'bg-blue-50'

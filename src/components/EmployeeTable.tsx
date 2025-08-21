@@ -166,7 +166,17 @@ export default function EmployeeTable({ metrics, showAllDeals = false }: Employe
               <Fragment key={metric.employee_name}>
                 <tr className="cursor-pointer" onClick={() => handleExpand(idx)}>
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{cleanedName}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{metric.meeting_count}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {metric.meeting_count}
+                    <div className="text-xs text-gray-500 mt-1">
+                      - ${Math.round(
+                        metric.deals_won_amount + 
+                        metric.deals_lost_amount + 
+                        metric.deals_in_play_under_150_amount + 
+                        metric.deals_overdue_150_plus_amount
+                      ).toLocaleString()} Total Dollars Proposed
+                    </div>
+                  </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-green-700 relative group">
                     <span
                       onMouseEnter={e => metric.deals_won_names?.length > 0 && handleShowTooltip(e, metric.deals_won_names, 'Won Deals')}
